@@ -1,0 +1,145 @@
+# github.com/cenkalti/backoff/v4 v4.1.2
+## explicit; go 1.13
+github.com/cenkalti/backoff/v4
+# github.com/davecgh/go-spew v1.1.1
+## explicit
+github.com/davecgh/go-spew/spew
+# github.com/go-faster/errors v0.5.0
+## explicit; go 1.17
+github.com/go-faster/errors
+# github.com/go-faster/jx v0.32.2
+## explicit; go 1.17
+github.com/go-faster/jx
+# github.com/go-faster/xor v0.3.0
+## explicit; go 1.15
+github.com/go-faster/xor
+# github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
+## explicit; go 1.16
+github.com/go-telegram-bot-api/telegram-bot-api/v5
+# github.com/gotd/ige v0.2.2
+## explicit; go 1.15
+github.com/gotd/ige
+# github.com/gotd/neo v0.1.5
+## explicit; go 1.12
+github.com/gotd/neo
+# github.com/gotd/td v0.55.2
+## explicit; go 1.17
+github.com/gotd/td/bin
+github.com/gotd/td/clock
+github.com/gotd/td/constant
+github.com/gotd/td/internal/ascii
+github.com/gotd/td/internal/crypto
+github.com/gotd/td/internal/crypto/srp
+github.com/gotd/td/internal/exchange
+github.com/gotd/td/internal/mt
+github.com/gotd/td/internal/mtproto
+github.com/gotd/td/internal/mtproto/salts
+github.com/gotd/td/internal/mtproxy
+github.com/gotd/td/internal/mtproxy/faketls
+github.com/gotd/td/internal/mtproxy/obfuscated2
+github.com/gotd/td/internal/mtproxy/obfuscator
+github.com/gotd/td/internal/pool
+github.com/gotd/td/internal/proto
+github.com/gotd/td/internal/proto/codec
+github.com/gotd/td/internal/rpc
+github.com/gotd/td/internal/syncio
+github.com/gotd/td/internal/tdsync
+github.com/gotd/td/internal/tmap
+github.com/gotd/td/internal/wsutil
+github.com/gotd/td/session
+github.com/gotd/td/session/tdesktop
+github.com/gotd/td/tdjson
+github.com/gotd/td/tdp
+github.com/gotd/td/telegram
+github.com/gotd/td/telegram/auth
+github.com/gotd/td/telegram/auth/qrlogin
+github.com/gotd/td/telegram/dcs
+github.com/gotd/td/telegram/internal/deeplink
+github.com/gotd/td/telegram/internal/manager
+github.com/gotd/td/telegram/internal/upconv
+github.com/gotd/td/telegram/internal/version
+github.com/gotd/td/telegram/message
+github.com/gotd/td/telegram/message/entity
+github.com/gotd/td/telegram/message/inline
+github.com/gotd/td/telegram/message/markup
+github.com/gotd/td/telegram/message/peer
+github.com/gotd/td/telegram/message/styling
+github.com/gotd/td/telegram/uploader
+github.com/gotd/td/telegram/uploader/source
+github.com/gotd/td/tg
+github.com/gotd/td/tgerr
+github.com/gotd/td/transport
+# github.com/jessevdk/go-flags v1.5.0
+## explicit; go 1.15
+github.com/jessevdk/go-flags
+# github.com/klauspost/compress v1.15.0
+## explicit; go 1.15
+github.com/klauspost/compress/flate
+github.com/klauspost/compress/gzip
+# github.com/pkg/errors v0.9.1
+## explicit
+github.com/pkg/errors
+# github.com/pmezard/go-difflib v1.0.0
+## explicit
+github.com/pmezard/go-difflib/difflib
+# github.com/segmentio/asm v1.1.3
+## explicit; go 1.17
+github.com/segmentio/asm/base64
+github.com/segmentio/asm/cpu
+github.com/segmentio/asm/cpu/arm
+github.com/segmentio/asm/cpu/arm64
+github.com/segmentio/asm/cpu/cpuid
+github.com/segmentio/asm/cpu/x86
+github.com/segmentio/asm/internal/unsafebytes
+# github.com/stretchr/testify v1.7.0
+## explicit; go 1.13
+github.com/stretchr/testify/assert
+github.com/stretchr/testify/require
+# go.etcd.io/bbolt v1.3.6
+## explicit; go 1.12
+go.etcd.io/bbolt
+# go.uber.org/atomic v1.9.0
+## explicit; go 1.13
+go.uber.org/atomic
+# go.uber.org/multierr v1.8.0
+## explicit; go 1.14
+go.uber.org/multierr
+# go.uber.org/zap v1.21.0
+## explicit; go 1.13
+go.uber.org/zap
+go.uber.org/zap/buffer
+go.uber.org/zap/internal/bufferpool
+go.uber.org/zap/internal/color
+go.uber.org/zap/internal/exit
+go.uber.org/zap/zapcore
+# golang.org/x/crypto v0.0.0-20220214200702-86341886e292
+## explicit; go 1.17
+golang.org/x/crypto/pbkdf2
+# golang.org/x/net v0.0.0-20220225172249-27dd8689420f
+## explicit; go 1.17
+golang.org/x/net/internal/socks
+golang.org/x/net/proxy
+# golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+## explicit
+golang.org/x/sync/errgroup
+golang.org/x/sync/singleflight
+# golang.org/x/sys v0.0.0-20220227234510-4e6760a101f9
+## explicit; go 1.17
+golang.org/x/sys/cpu
+golang.org/x/sys/internal/unsafeheader
+golang.org/x/sys/unix
+# gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
+## explicit
+gopkg.in/yaml.v3
+# nhooyr.io/websocket v1.8.7
+## explicit; go 1.13
+nhooyr.io/websocket
+nhooyr.io/websocket/internal/bpool
+nhooyr.io/websocket/internal/errd
+nhooyr.io/websocket/internal/wsjs
+nhooyr.io/websocket/internal/xsync
+# rsc.io/qr v0.2.0
+## explicit
+rsc.io/qr
+rsc.io/qr/coding
+rsc.io/qr/gf256

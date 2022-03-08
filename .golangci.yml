@@ -1,0 +1,107 @@
+run:
+  timeout: 2m
+  output:
+    format: tab
+
+  skip-dirs:
+    - vendor
+
+
+output:
+  sort-results: true
+
+
+linters-settings:
+  govet:
+    check-shadowing: true
+    enable-all: true
+
+  gocyclo:
+    min-complexity: 10
+
+  staticcheck:
+    go: 1.17
+  
+  stylecheck:
+    go: 1.17
+  
+  unused:
+    go: 1.17
+  
+  goconst:
+    min-len: 2
+    min-occurrences: 2
+  
+  misspell:
+    locale: US
+  
+  lll:
+    line-length: 140
+  
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - performance
+      - style
+      - experimental
+    disabled-checks:
+      - hugeParam
+
+
+linters:
+  enable:
+    - deadcode
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - structcheck
+    - unused
+    - typecheck
+    - varcheck
+    - dupl
+    - errorlint
+    - gochecknoinits
+    - gocritic
+    - gocyclo
+    - gofumpt
+    - gosec
+    - lll
+    - misspell
+    - nakedret
+    - nestif
+    - prealloc
+    - unconvert
+    - unparam
+    - stylecheck
+    - megacheck
+    - gas
+  fast: false
+  disable-all: true
+
+
+issues:
+  exclude-rules:
+    - text: "at least one file in a package should have a package comment"
+      linters:
+        - stylecheck
+
+    - text: "should have a package comment, unless it's in another file for this package"
+      linters:
+        - golint
+
+    - path: _test\.go
+      text: "fieldalignment: struct with"
+      linters:
+        - govet
+
+    - path: _test\.go
+      linters:
+        - gosec
+        - dupl
+  exclude-use-default: false
+
+
+service:
+  golangci-lint-version: 1.44.x
