@@ -29,6 +29,8 @@ func main() {
 	p := flags.NewParser(&opts, flags.HelpFlag|flags.PassDoubleDash)
 	p.CommandHandler = func(command flags.Commander, args []string) error {
 		logger, _ := zap.NewDevelopment()
+		defer logger.Sync()
+
 		c := command.(cmd.CommonOptionsCommander)
 		c.SetCommon(cmd.CommonOpts{
 			Debug:  opts.Debug,
