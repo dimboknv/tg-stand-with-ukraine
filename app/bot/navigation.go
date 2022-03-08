@@ -20,13 +20,16 @@ var (
 func parseChanelURLs(u tgbotapi.Update) []string {
 	urls := make([]string, 0)
 	for _, e := range u.Message.Entities {
+		if len(e.URL) == 0 {
+			continue
+		}
 		switch e.Type {
 		case "text_link", "url":
 			if tmeRegexp.MatchString(e.URL) {
 				urls = append(urls, e.URL)
 			}
 		case "mention":
-			urls = append(urls, fmt.Sprintf("https://t.me/%s", e.URL[:1]))
+			urls = append(urls, e.URL)
 		}
 	}
 	if len(urls) > 0 {
