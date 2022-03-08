@@ -35,7 +35,7 @@ type BotCmd struct {
 	Token string `long:"token" env:"TOKEN" description:"Bot token" required:"true"`
 	DB    string `long:"db" env:"DB" description:"Database filepath" required:"true" default:"bbolt.db"`
 	CommonOpts
-	Admins []string `short:"a" long:"admin" env:"ADMIN" description:"Bot admin telegram usernames" required:"true"`
+	Admins []string `short:"a" long:"admin" env:"ADMIN" env-delim:"," description:"Bot admin telegram usernames" required:"true"`
 	Hub    `group:"hub" namespace:"hub" env-namespace:"HUB"`
 }
 
