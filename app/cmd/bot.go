@@ -47,7 +47,7 @@ func (cmd *BotCmd) Execute(_ []string) error {
 	defer cancel()
 	go func() {
 		defer cancel()
-		_ = cmd.waitSigterm(ctx)
+		cmd.waitSigterm(ctx)
 	}()
 
 	content, err := os.ReadFile(string(cmd.PublicKey))

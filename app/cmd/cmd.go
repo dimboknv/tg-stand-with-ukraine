@@ -38,16 +38,14 @@ func (opts *CommonOpts) SetCommon(commonOpts CommonOpts) {
 	opts.Logger = commonOpts.Logger
 }
 
-func (opts *CommonOpts) waitSigterm(ctx context.Context) error {
+func (opts *CommonOpts) waitSigterm(ctx context.Context) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	defer close(sigCh)
 	defer signal.Stop(sigCh)
 	select {
 	case <-sigCh:
-		opts.Logger.Info("interrupt signal detected")
-		return nil
+		opts.Logger.Warn("interrupt signal")
 	case <-ctx.Done():
-		return ctx.Err()
 	}
 }
