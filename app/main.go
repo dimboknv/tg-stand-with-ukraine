@@ -14,7 +14,7 @@ import (
 // Opts with all cli commands and flags
 type Opts struct {
 	BotCmd cmd.BotCmd `command:"bot" description:"Run bot"`
-	Debug  bool       `long:"debug" description:"Is debug mode?"`
+	Debug  bool       `long:"debug" env:"DEBUG" description:"Is debug mode?"`
 }
 
 var (
