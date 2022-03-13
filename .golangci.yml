@@ -50,6 +50,7 @@ linters-settings:
 
 linters:
   enable:
+    - goimports
     - deadcode
     - errcheck
     - gosimple
