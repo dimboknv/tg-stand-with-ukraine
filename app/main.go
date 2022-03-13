@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/dimboknv/tg-stand-with-ukraine/app/cmd"
-
 	"github.com/jessevdk/go-flags"
 	"go.uber.org/zap"
 )
@@ -29,7 +28,9 @@ func main() {
 	p := flags.NewParser(&opts, flags.HelpFlag|flags.PassDoubleDash)
 	p.CommandHandler = func(command flags.Commander, args []string) error {
 		logger, _ := zap.NewDevelopment()
-		defer logger.Sync()
+		defer func() {
+			_ = logger.Sync()
+		}()
 
 		c := command.(cmd.CommonOptionsCommander)
 		c.SetCommon(cmd.CommonOpts{
