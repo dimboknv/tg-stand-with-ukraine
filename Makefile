@@ -18,7 +18,7 @@ fieldalignment:
 fieldalignment-fix:
 	 fieldalignment --fix ./...
 
-docker-build:
+docker:
 	docker build -t tg-stand-with-ukraine .
 
 .DEFAULT_GOAL := build
