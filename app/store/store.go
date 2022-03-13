@@ -7,11 +7,15 @@ import (
 type Store interface {
 	GetUser(id int64) (User, error)
 	PutUser(user User) error
-	DeleteUser(id int64) error
 	GetUsers() ([]User, error)
-	GetReportURLs() ([]string, error)
-	PutReportURL(url string) error
-	PutReportURLs(urls []string) error
+
+	// PutReportURL(url string) error
+	// PutReportURLs(urls []string) error
+
+	GetRashist(url string) (Rashist, error)
+	PutRashist(rashist Rashist) error
+	GetRashists() ([]Rashist, error)
+	PutRashists([]Rashist) error
 	Close() error
 }
 

@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/dimboknv/tg-stand-with-ukraine/app/reporter"
+
 	"github.com/dimboknv/tg-stand-with-ukraine/app/hub"
 	"github.com/dimboknv/tg-stand-with-ukraine/app/store"
 
@@ -15,22 +17,22 @@ import (
 )
 
 type Opts struct {
-	DB     store.Store
-	Logger *zap.Logger
-	Hub    *hub.Hub
-	Token  string
-	Admins []string
-	Debug  bool
+	DB       store.Store
+	Logger   *zap.Logger
+	Hub      *hub.Hub
+	Reporter *reporter.Reporter
+	Token    string
+	Admins   []string
+	Debug    bool
 }
 
 var digitsRegexp = regexp.MustCompile(`\D+`)
-
-type handler func(ctx context.Context, user store.User, u tgbotapi.Update) error
 
 type Bot struct {
 	hub         *hub.Hub
 	db          store.Store
 	bot         *tgbotapi.BotAPI
+	reporter    *reporter.Reporter
 	admins      map[string]struct{}          // [username]exist
 	msgHandlers map[store.Navigation]handler // [navigation]handler
 	cmdHandlers map[string]handler           // [commandName]handler
@@ -54,15 +56,20 @@ func New(opts Opts) (*Bot, error) {
 	}
 
 	return &Bot{
-		hub:    opts.Hub,
-		db:     opts.DB,
-		bot:    bot,
-		admins: admins,
-		log:    opts.Logger,
+		hub:      opts.Hub,
+		db:       opts.DB,
+		bot:      bot,
+		admins:   admins,
+		log:      opts.Logger,
+		reporter: opts.Reporter,
 	}, nil
 }
 
 func (b *Bot) getUser(u tgbotapi.Update) (store.User, error) {
+	if u.SentFrom() == nil {
+		return store.User{}, errors.Errorf("can`t get message sender")
+	}
+
 	chatID := u.Message.Chat.ID
 	user, err := b.db.GetUser(u.SentFrom().ID)
 	if err != nil {
@@ -75,7 +82,7 @@ func (b *Bot) getUser(u tgbotapi.Update) (store.User, error) {
 				Navigation store.Navigation
 			}{
 				chatID: {
-					Navigation: store.WelcomeNav,
+					Navigation: store.UserNavigation,
 				},
 			},
 			ID: u.SentFrom().ID,
@@ -86,7 +93,7 @@ func (b *Bot) getUser(u tgbotapi.Update) (store.User, error) {
 			Phone      string
 			Navigation store.Navigation
 		}{
-			Navigation: store.WelcomeNav,
+			Navigation: store.UserNavigation,
 		}
 	}
 	return user, nil
@@ -105,33 +112,12 @@ func (b *Bot) sendWelcomeMsg(chatID int64) error {
 	return b.sendMsg(chatID, "Welcome to reporter bot. You need to give me access to your telegram account. Stand with Ukraine!")
 }
 
-func (b *Bot) handleUpdate(ctx context.Context, u tgbotapi.Update) error {
-	chatID := u.Message.Chat.ID
-
-	user, err := b.getUser(u)
-	if err != nil {
-		return err
-	}
-
-	handler := func(context.Context, store.User, tgbotapi.Update) error { return b.sendWelcomeMsg(chatID) }
-	if h, has := b.msgHandlers[user.Chats[chatID].Navigation]; has {
-		handler = h
-	}
-
-	// If the Message was not a command, Command() returns an empty string
-	if h, has := b.cmdHandlers[u.Message.Command()]; has {
-		handler = h
-	}
-
-	return handler(ctx, user, u)
-}
-
 func (b *Bot) Run(ctx context.Context) {
 	updateConfig := tgbotapi.NewUpdate(0)
-	updateConfig.Timeout = 30
+	updateConfig.Timeout = 60
 	updates := b.bot.GetUpdatesChan(updateConfig)
 	b.registerHandlers()
-	go b.hub.Run(ctx)
+	go b.reporter.Run(ctx)
 
 	b.log.Info("start listen for updates...")
 	for {
@@ -140,9 +126,8 @@ func (b *Bot) Run(ctx context.Context) {
 			go func(u tgbotapi.Update) {
 				c, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 				defer cancel()
-				if err := b.handleUpdate(c, u); err != nil {
-					b.log.Error("fail to handle update", zap.Any("update", u), zap.Error(err))
-					return
+				if err := b.handleUserErrorIfNeeded(u, b.handleUpdate(c, u)); err != nil {
+					b.log.Error("fail to handle user error", zap.Any("update", u), zap.Error(err))
 				}
 			}(u)
 		case <-ctx.Done():
@@ -150,4 +135,29 @@ func (b *Bot) Run(ctx context.Context) {
 			return
 		}
 	}
+}
+
+func (b *Bot) handleUserErrorIfNeeded(u tgbotapi.Update, maybeUserErr error) error {
+	if maybeUserErr == nil {
+		return nil
+	}
+
+	chatID := u.Message.Chat.ID
+	msg := "Ops, something goes wrong :("
+
+	if userErr := (&userError{}); errors.As(maybeUserErr, &userErr) {
+		msg = userErr.UserMsg
+	} else {
+		b.log.Error("fail to handle update", zap.Any("update", u), zap.Error(maybeUserErr))
+	}
+
+	if err := b.sendMsg(chatID, msg); err != nil {
+		return err
+	}
+	user, err := b.getUser(u)
+	if err != nil {
+		return err
+	}
+	user.Chats[u.Message.Chat.ID].Navigation = store.UserNavigation
+	return b.db.PutUser(user)
 }

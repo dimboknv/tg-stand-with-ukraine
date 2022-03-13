@@ -12,7 +12,7 @@ type logger struct {
 }
 
 func (l *logger) Println(v ...interface{}) {
-	l.log(fmt.Sprintln(v...))
+	l.log(fmt.Sprint(v...))
 }
 
 func (l *logger) Printf(format string, v ...interface{}) {
@@ -30,6 +30,5 @@ func newBotLogger(log *zap.Logger, debug bool) tgbotapi.BotLogger {
 			log.Debug(fmt.Sprintf(format, v...))
 		}
 	}
-
 	return l
 }

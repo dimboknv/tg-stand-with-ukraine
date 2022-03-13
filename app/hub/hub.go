@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/rsa"
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 
 	"github.com/dimboknv/tg-stand-with-ukraine/app/store"
-
+	"github.com/gotd/contrib/middleware/floodwait"
 	"github.com/gotd/td/telegram"
+	"github.com/gotd/td/telegram/auth"
 	"github.com/gotd/td/telegram/dcs"
 	"github.com/gotd/td/telegram/message"
 	"github.com/gotd/td/telegram/message/peer"
@@ -21,58 +23,60 @@ import (
 type Hub struct {
 	db            store.Store
 	ctx           context.Context
-	clients       map[string]*telegram.Client
-	phoneCodeHash map[string]string
+	clients       map[string]*telegram.Client // [userIDphone]client
+	phoneCodeHash map[string]string           // [userIDphone]codeHash
 	mu            *sync.RWMutex
 	log           *zap.Logger
 	publicKey     *rsa.PublicKey
 	deviceModel   string
 	appVersion    string
-	reportMessage string
 	appHash       string
 	dcOption      struct {
 		IPAddress string
 		ID        int
 		Port      int
 	}
-	sendReportsInterval time.Duration
-	appID               int
-	resendReport        bool
+	clientTTL time.Duration
+	appID     int
 }
 
 type Opts struct {
-	DB            store.Store
-	Logger        *zap.Logger
-	PublicKey     *rsa.PublicKey
-	DeviceModel   string
-	AppVersion    string
-	ReportMessage string
-	AppHash       string
-	DCOption      struct {
+	Context     context.Context
+	DB          store.Store
+	Logger      *zap.Logger
+	PublicKey   *rsa.PublicKey
+	AppHash     string
+	DeviceModel string
+	AppVersion  string
+	DCOption    struct {
 		IPAddress string
 		ID        int
 		Port      int
 	}
-	AppID               int
-	SendReportsInterval time.Duration
-	ResendReport        bool
+	ClientTTL time.Duration
+	AppID     int
 }
 
+var (
+	NotAuthorizedErr     = errors.New("not authorized")
+	AlreadyAuthorizedErr = errors.New("already authorized")
+)
+
 func NewHub(opts Opts) *Hub {
+	rand.Seed(time.Now().UnixNano())
 	return &Hub{
-		db:                  opts.DB,
-		clients:             map[string]*telegram.Client{},
-		phoneCodeHash:       map[string]string{},
-		mu:                  &sync.RWMutex{},
-		log:                 opts.Logger,
-		publicKey:           opts.PublicKey,
-		deviceModel:         opts.DeviceModel,
-		appVersion:          opts.AppVersion,
-		reportMessage:       opts.ReportMessage,
-		sendReportsInterval: opts.SendReportsInterval,
-		resendReport:        opts.ResendReport,
-		appHash:             opts.AppHash,
-		appID:               opts.AppID,
+		ctx:           opts.Context,
+		db:            opts.DB,
+		clients:       map[string]*telegram.Client{},
+		phoneCodeHash: map[string]string{},
+		mu:            &sync.RWMutex{},
+		log:           opts.Logger,
+		publicKey:     opts.PublicKey,
+		deviceModel:   opts.DeviceModel,
+		appVersion:    opts.AppVersion,
+		appHash:       opts.AppHash,
+		appID:         opts.AppID,
+		clientTTL:     opts.ClientTTL,
 		dcOption: struct {
 			IPAddress string
 			ID        int
@@ -85,174 +89,222 @@ func NewHub(opts Opts) *Hub {
 	}
 }
 
-func (hub *Hub) AppID() int {
-	return hub.appID
+func (h *Hub) AppID() int {
+	return h.appID
 }
 
-func (hub *Hub) AppHash() string {
-	return hub.appHash
+func (h *Hub) AppHash() string {
+	return h.appHash
 }
 
-func (hub *Hub) makeClient(user store.User, phone string) *telegram.Client {
-	return telegram.NewClient(hub.appID, hub.appHash, telegram.Options{
-		SessionStorage: NewStoreSession(user, phone, hub.db),
-		Logger:         hub.log.Named(fmt.Sprintf("%d.%s", user.ID, phone)),
+func (h *Hub) SendReport(ctx context.Context, user store.User, phone, url, msg string) (store.Report, error) {
+	client, err := h.getOrMakeClient(user, phone, checkAuthorization)
+	if err != nil {
+		return store.Report{}, err
+	}
+	return h.clientSendReport(ctx, client, url, msg)
+}
+
+func (h *Hub) AuthPhone(ctx context.Context, user store.User, phone string) error {
+	client, err := h.getOrMakeClient(user, phone, noop)
+	if err != nil {
+		return err
+	}
+
+	authorized, err := isAuthorizedClient(ctx, client)
+	if err != nil {
+		return err
+	}
+	if authorized {
+		return AlreadyAuthorizedErr
+	}
+
+	sentCode, err := client.Auth().SendCode(ctx, phone, auth.SendCodeOptions{})
+	if err != nil {
+		return errors.Wrap(err, "client auth can`t send code")
+	}
+
+	h.mu.Lock()
+	h.phoneCodeHash[key(user.ID, phone)] = sentCode.PhoneCodeHash
+	h.mu.Unlock()
+	return nil
+}
+
+func (h *Hub) AuthCode(ctx context.Context, user store.User, phone, code string) (need2fa bool, err error) {
+	h.mu.Lock()
+	codeHash := h.phoneCodeHash[key(user.ID, phone)]
+	delete(h.phoneCodeHash, key(user.ID, phone))
+	h.mu.Unlock()
+
+	client, err := h.getClient(user.ID, phone)
+	if err != nil {
+		return false, err
+	}
+
+	authorized, err := isAuthorizedClient(ctx, client)
+	if err != nil {
+		return false, err
+	}
+	if authorized {
+		return false, nil
+	}
+
+	_, signInErr := client.Auth().SignIn(ctx, phone, code, codeHash)
+	if errors.Is(signInErr, auth.ErrPasswordAuthNeeded) {
+		return true, nil
+	}
+
+	return false, errors.Wrap(signInErr, "signIn failed")
+}
+
+func (h *Hub) AuthPass2FA(ctx context.Context, user store.User, phone, pass2fa string) error {
+	client, err := h.getClient(user.ID, phone)
+	if err != nil {
+		return err
+	}
+	if _, err := client.Auth().Password(ctx, pass2fa); err != nil {
+		return errors.Wrap(err, "invalid 2fa")
+	}
+	return nil
+}
+
+func (h *Hub) newClient(user store.User, phone string) *telegram.Client {
+	log := h.log.Named(fmt.Sprintf("%d.%s", user.ID, phone))
+	return telegram.NewClient(h.appID, h.appHash, telegram.Options{
+		Middlewares:    []telegram.Middleware{logFlood(log), floodwait.NewSimpleWaiter()},
+		SessionStorage: NewStoreSession(user, phone, h.db),
+		Logger:         log,
 		Device: telegram.DeviceConfig{
-			DeviceModel:    hub.deviceModel,
-			AppVersion:     hub.appVersion,
+			DeviceModel:    h.deviceModel,
+			AppVersion:     h.appVersion,
 			SystemLangCode: "en",
 			LangCode:       "en",
 		},
-		RetryInterval: 500 * time.Millisecond,
-		PublicKeys:    []telegram.PublicKey{{RSA: hub.publicKey}},
+		PublicKeys: []telegram.PublicKey{{RSA: h.publicKey}},
 		DCList: dcs.List{
 			Options: []tg.DCOption{
 				{
-					ID:        hub.dcOption.ID,
-					IPAddress: hub.dcOption.IPAddress,
-					Port:      hub.dcOption.Port,
+					ID:        h.dcOption.ID,
+					IPAddress: h.dcOption.IPAddress,
+					Port:      h.dcOption.Port,
 				},
 			},
 		},
 	})
 }
 
-func (hub *Hub) sendReport(ctx context.Context, client *telegram.Client, reportURL string) (store.Report, error) {
-	api := client.API()
-	p, err := message.NewSender(api).Resolve(reportURL, peer.OnlyChannel).AsInputPeer(ctx)
-	if err != nil {
-		return store.Report{}, errors.Wrapf(err, "can`t resolve %q peer", reportURL)
-	}
+func (h *Hub) makeClient(user store.User, phone string, fn prepareFn) (*telegram.Client, error) {
+	client := h.newClient(user, phone)
+	withErrCh := make(chan error, 1)
 
+	h.mu.Lock()
+	h.clients[key(user.ID, phone)] = client
+	h.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(h.ctx, h.clientTTL)
+
+	go func() {
+		defer func() {
+			cancel()
+			h.mu.Lock()
+			delete(h.clients, key(user.ID, phone))
+			h.mu.Unlock()
+			defer close(withErrCh)
+		}()
+
+		h.log.Info("run telegram client", zap.String("phone", phone), zap.Duration("ttl", h.clientTTL))
+		err := client.Run(ctx, func(ctx context.Context) error {
+			// todo save user state
+			if err := fn(ctx, client); err != nil {
+				return err
+			}
+			withErrCh <- nil
+			<-ctx.Done()
+			return ctx.Err()
+		})
+		withErrCh <- err
+		if err != nil {
+			if !errors.Is(err, context.DeadlineExceeded) {
+				h.log.Error("shutdown telegram client with error", zap.String("phone", phone), zap.Error(err))
+				return
+			}
+		}
+		h.log.Info("success to shutdown telegram client", zap.String("phone", phone))
+	}()
+
+	return client, <-withErrCh
+}
+
+func (h *Hub) clientSendReport(ctx context.Context, client *telegram.Client, url, msg string) (store.Report, error) {
+	api := client.API()
+	p, err := message.NewSender(api).Resolve(url, peer.OnlyChannel).AsInputPeer(ctx)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return store.Report{}, errors.Wrapf(err, "can`t resolve %q peer", url)
+		}
+		return store.Report{}, &ResolveURLErr{Err: err, URL: url}
+	}
 	ok, err := api.AccountReportPeer(ctx, &tg.AccountReportPeerRequest{
 		Peer:    p,
 		Reason:  &tg.InputReportReasonOther{},
-		Message: hub.reportMessage,
+		Message: msg,
 	})
 	if err != nil {
-		return store.Report{}, errors.Wrapf(err, "fail to account report peer")
+		return store.Report{}, errors.Wrapf(err, "fail account report peer")
 	}
 	if !ok {
 		return store.Report{}, errors.Errorf("report is not ok")
 	}
 
 	return store.Report{
-		URL:  reportURL,
-		Text: hub.reportMessage,
+		URL:       url,
+		Text:      msg,
+		CreatedAt: time.Now(),
 	}, nil
 }
 
-func (hub *Hub) makeAndRunClientIfNeeded(user store.User, phone string) *telegram.Client {
-	hub.mu.RLock()
-	client, has := hub.clients[phone]
-	hub.mu.RUnlock()
-	if !has {
-		client = hub.makeClient(user, phone)
-		// runClient will add client to hub.clients
-		hub.runClient(phone, client)
+func (h *Hub) getOrMakeClient(user store.User, phone string, fn prepareFn) (*telegram.Client, error) {
+	client, err := h.getClient(user.ID, phone)
+	if err == nil {
+		return client, nil
 	}
-	return client
+	return h.makeClient(user, phone, fn)
 }
 
-func (hub *Hub) sendReports(ctx context.Context) error {
-	users, err := hub.db.GetUsers()
+func (h *Hub) getClient(userID int64, phone string) (*telegram.Client, error) {
+	h.mu.RLock()
+	client, ok := h.clients[key(userID, phone)]
+	h.mu.RUnlock()
+
+	if !ok {
+		return nil, errors.New("client is not running")
+	}
+	return client, nil
+}
+
+func key(userID int64, phone string) string {
+	return fmt.Sprintf("%d%s", userID, phone)
+}
+
+func isAuthorizedClient(ctx context.Context, client *telegram.Client) (bool, error) {
+	status, err := client.Auth().Status(ctx)
 	if err != nil {
-		return errors.Wrap(err, "can`t get users")
+		return false, errors.Wrap(err, "can`t get telegram client auth status")
 	}
+	return status.Authorized, nil
+}
 
-	reportURLs, err := hub.db.GetReportURLs()
+type prepareFn func(ctx context.Context, client *telegram.Client) error
+
+func noop(context.Context, *telegram.Client) error { return nil }
+
+func checkAuthorization(ctx context.Context, client *telegram.Client) error {
+	isAuthorized, err := isAuthorizedClient(ctx, client)
 	if err != nil {
-		return errors.Wrap(err, "can`t get report list")
+		return err
 	}
-
-	process := func(reportURL string, user store.User, phone string) error {
-		client := hub.makeAndRunClientIfNeeded(user, phone)
-		rep, err := hub.sendReport(ctx, client, reportURL)
-		if err != nil {
-			return err
-		}
-		if user.Clients[phone].SentReports == nil {
-			user.Clients[phone].SentReports = map[string]store.Report{}
-		}
-		user.Clients[phone].SentReports[reportURL] = rep
-		return hub.db.PutUser(user)
-	}
-
-	for _, reportURL := range reportURLs {
-		for _, user := range users {
-			for phone := range user.Clients {
-				if _, has := user.Clients[phone].SentReports[reportURL]; has && !hub.resendReport {
-					continue
-				}
-
-				// todo mark report if account is banned
-				if err := process(reportURL, user, phone); err != nil {
-					hub.log.Error("failed to send report", zap.String("report", reportURL), zap.String("phone", phone), zap.Error(err))
-					continue
-				}
-				hub.log.Info("success to send report", zap.String("report", reportURL), zap.String("phone", phone))
-
-				// todo??
-				time.Sleep(2 * time.Second)
-			}
-		}
+	if !isAuthorized {
+		return NotAuthorizedErr
 	}
 	return nil
-}
-
-func (hub *Hub) runClient(phone string, client *telegram.Client) {
-	isStarted := make(chan struct{})
-	defer close(isStarted)
-
-	go func() {
-		defer func() {
-			hub.mu.Lock()
-			delete(hub.clients, phone)
-			hub.mu.Unlock()
-		}()
-
-		hub.log.Info("running telegram client...", zap.String("phone", phone))
-
-		err := client.Run(hub.ctx, func(ctx context.Context) error {
-			hub.mu.Lock()
-			hub.clients[phone] = client
-			hub.mu.Unlock()
-
-			hub.log.Info("telegram client is started", zap.String("phone", phone))
-			isStarted <- struct{}{}
-			<-ctx.Done()
-			return nil
-		})
-		if err != nil {
-			hub.log.Error("shutdown telegram client with error", zap.String("phone", phone), zap.Error(err))
-			return
-		}
-		hub.log.Info("success to shutdown telegram client", zap.String("phone", phone))
-	}()
-	<-isStarted
-}
-
-func (hub *Hub) Run(ctx context.Context) {
-	ticker := time.NewTicker(hub.sendReportsInterval)
-	defer ticker.Stop()
-	hub.ctx = ctx
-
-	for {
-		select {
-		case <-ticker.C:
-			go func() {
-				hub.log.Info("start reporting...")
-				c, cancel := context.WithTimeout(ctx, 5*time.Minute)
-				defer cancel()
-
-				if err := hub.sendReports(c); err != nil {
-					hub.log.Error("reporting failed", zap.Error(err))
-					return
-				}
-				hub.log.Info("reporting is success")
-			}()
-		case <-ctx.Done():
-			return
-		}
-	}
 }

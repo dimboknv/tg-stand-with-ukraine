@@ -16,29 +16,33 @@ Usage:
   tg-bot [OPTIONS] bot [bot-OPTIONS]
 
 Application Options:
-  --debug             Is debug mode?
+  --debug              Is debug mode? [$DEBUG]
 
 Help Options:
-  -h, --help          Show this help message
+  -h, --help           Show this help message
 
   [bot command options]
-  --token=            Bot token [$TOKEN]
-  --db=               Database filepath (default: bbolt.db) [$DB]
-  -a, --admin=        Bot admin telegram usernames [$ADMIN]
+  --token=             Bot token [$TOKEN]
+  --db=                Database filepath (default: bbolt.db) [$DB]
+  -a, --admin=         Bot admin telegram usernames [$ADMIN]
+
+reporter:
+  --reporter.msg=      A report message (default: The channel undermines the integrity of the Ukrainian state. Spreading fake news, misleading people. There are a lot of posts with threats against
+    Ukrainians and Ukrainian soldiers. Block him ASAP) [$REPORTER_MESSAGE]
+  --reporter.interval= Interval between sending reports (default: 40m) [$REPORTER_INTERVAL]
+  --reporter.max_reps= Max number of sent reports from a telegram client (default: 25) [$REPORTER_INTERVAL_MAX_REPORTS]
 
 hub:
-  --hub.app_hash=     Telegram API app hash [$HUB_APP_HASH]
-  --hub.rep_msg=      A report message (default: The channel undermines the integrity of the Ukrainian state. Spreading fake news, misleading people. There are a lot of posts with threats against Ukrainians and Ukrainian soldiers. Block him ASAP) [$HUB_REP_MSG]
-  --hub.pk=           Telegram API public key [$HUB_PUBLIC_KEY]
-  --hub.device=       Telegram API device model (default: Dmitry Nev) [$HUB_DEVICE]
-  --hub.app_id=       Telegram API app id [$HUB_APP_ID]
-  --hub.rep_interval= Interval between sending reports (default: 10m) [$HUB_SEND_REPORTS_INTERVAL]
-  --hub.resend_rep    Do I resend same reports? [$HUB_RESEND_REPORT]
+  --hub.app_hash=      Telegram API app hash [$HUB_APP_HASH]
+  --hub.pk=            Telegram API public key [$HUB_PUBLIC_KEY]
+  --hub.device=        Telegram API device model (default: Dmitry Nev) [$HUB_DEVICE]
+  --hub.client_ttl=    A telegram API client TTL (default: 3m) [$HUB_CLIENT_TTL]
+  --hub.app_id=        Telegram API app id [$HUB_APP_ID]
 
 dc:
-  --hub.dc.ip=        DC ip address [$HUB_DC_IP]
-  --hub.dc.id=        DC id (default: 2) [$HUB_DC_ID]
-  --hub.dc.port=      DC port (default: 443) [$HUB_DC_PORT]
+  --hub.dc.ip=         DC ip address [$HUB_DC_IP]
+  --hub.dc.id=         DC id (default: 2) [$HUB_DC_ID]
+  --hub.dc.port=       DC port (default: 443) [$HUB_DC_PORT]
 ```
 
 За допомогою `docker-compose.yml`:
@@ -56,16 +60,20 @@ services:
       - DB=/app/db/bbolt.db
       - ADMIN=<telegram acoount usernames>
       - DEBUG=true
+
       - HUB_APP_ID=<TELEGRAM app_id>
       - HUB_APP_HASH=<TELEGRAM app_hash>
-      - HUB_REP_MSG=The channel undermines the integrity of the Ukrainian state. Spreading fake news, misleading people. There are a lot of posts with threats against Ukrainians and Ukrainian soldiers. Block him ASAP
-      - HUB_PUBLIC_KEY=/app/publicKey
+      - HUB_PUBLIC_KEY=/app/publicKey.pem
       - HUB_DEVICE=Dmitry Nev
-      - HUB_SEND_REPORTS_INTERVAL=10m
-      - HUB_RESEND_REPORT=false
-      - HUB_DC_PORT=<TELEGRAM DC POT>
+      - HUB_CLIENT_TTL=10m
+
+      - HUB_DC_PORT=<TELEGRAM DC PORT>
       - HUB_DC_IP=<TELEGRAM DC IP>
-      - HUB_DC_ID=<TELEGRAM DC IP>
+      - HUB_DC_ID=<TELEGRAM DC ID>
+
+      - REPORTER_INTERVAL=40m
+      - REPORTER_INTERVAL_MAX_REPORTS=25
+      - REPORTER_MESSAGE=The channel undermines the integrity of the Ukrainian state. Spreading fake news, misleading people. There are a lot of posts with threats against Ukrainians and Ukrainian soldiers. Block him ASAP
     volumes:
       - <PUBLIC KEY FILE>:/app/publicKey
       - <DATABASE FOLDER>::/app/db
@@ -90,7 +98,7 @@ docker run -v ./publicKey:/app/publicKey -v db:/app/db  tg-stand-with-ukraine ap
 ```yaml
     volumes:
       - <PUBLIC KEY FILE>:/app/publicKey
-      - <DATABASE FOLDER>::/app/db
+      - <DATABASE FOLDER>:/app/db
 ```
 
 ```shell
@@ -99,15 +107,13 @@ docker-compose up
 
 ## Використання
 
-Після успішного запуску бота переходимо до нього в чат натискаемо `/login` команду, проходимо авторизацію. Після успішної авторизації клієнтів адміни бота, ті що зазначені в `-a, --admin= Bot admin telegram username [$ADMIN]`,  можут надсилати повідомлення із посиланнями до пропагандистьских каналів. Бот автоматично розбере їх та збереже до своєї бази, після чого авторизовані телеграм клієнти будуть відпраляти одноразово або багаторазово `--hub.resend_rep  Do I resend same reports? [$HUB_RESEND_REPORT]`  репорти із інтервалом `--hub.rep_interval= Interval between sending reports (default: 10m) [$HUB_SEND_REPORTS_INTERVAL]`
+Після успішного запуску бота переходимо до нього в чат натискаемо `/login` команду, проходимо авторизацію. Після успішної авторизації клієнтів адміни бота, ті що зазначені в `-a, --admin= Bot admin telegram username [$ADMIN]`,  можут надсилати повідомлення із посиланнями до пропагандистьских каналів. Бот автоматично розбере їх та збереже до своєї бази, після чого авторизовані телеграм клієнти будуть відпраляти одноразово репорти із інтервалом `--hub.rep_interval= Interval between sending reports (default: 40m) [$HUB_SEND_REPORTS_INTERVAL]`
 
 ## Рекомендації 
 
 - НІКОМУ НЕ ПОВІДОМЛЯЙТЕ ДАНІ отримані із https://t.me/BotFather та https://my.telegram.org
 
-- Не задавайте `--hub.rep_interval= Interval between sending reports (default: 10m) [$HUB_SEND_REPORTS_INTERVAL]` меншим ніж 5-10хв для запобігання бану.
-
-- Опцію `--hub.resend_rep Do I resend same reports?` краще тримати виключеною, невідомо що будет якощо клієн спамить одні і тіж репорти (бан?).
+- Не задавайте `--hub.rep_interval= Interval between sending reports (default: 40m) [$HUB_SEND_REPORTS_INTERVAL]` меншим ніж 5-10хв для запобігання бану.
 
 - Після успішної авторизації клієнта видаліть повідомлення із приватними даними номер, код, 2fa пароль.
 
@@ -135,6 +141,8 @@ docker-compose up
 - [ ] автоматичне видалення повідомлення із номером, кодом, 2fa паролем 
 
 - [x] розбирати посилання на пропагандистьскі канали у форматі `@channel_name`
+
+- [ ] розбирати посилання на пропагандистьскі канали у форматі посилання на запрошення
 
 
 ## Дякую за натхнення

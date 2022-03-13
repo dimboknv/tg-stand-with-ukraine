@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	usersBucket   = "users"
-	reportsBucket = "reports"
+	usersBucket    = "users"
+	reportsBucket  = "reports"
+	rashistsBucket = "rashists"
 )
 
 type bboltStore struct {
@@ -29,11 +30,63 @@ func NewBoltStore(filename string) (*bboltStore, error) {
 	return store, nil
 }
 
+func (db *bboltStore) GetRashist(url string) (Rashist, error) {
+	var rashist Rashist
+	err := db.db.View(func(tx *bbolt.Tx) (err error) {
+		bkt := tx.Bucket([]byte(usersBucket))
+		return db.load(bkt, []byte(url), &rashist)
+	})
+	if err != nil {
+		return Rashist{}, err
+	}
+	return rashist, nil
+}
+
+func (db *bboltStore) PutRashist(rashist Rashist) error {
+	return db.db.Update(func(tx *bbolt.Tx) error {
+		bkt := tx.Bucket([]byte(rashistsBucket))
+		return db.save(bkt, []byte(rashist.URL), rashist)
+	})
+}
+
+func (db *bboltStore) GetRashists() ([]Rashist, error) {
+	res := make([]Rashist, 0)
+	err := db.db.View(func(tx *bbolt.Tx) (err error) {
+		bkt := tx.Bucket([]byte(rashistsBucket))
+		cursor := bkt.Cursor()
+		for k, v := cursor.First(); k != nil; k, v = cursor.Next() {
+			var rashist Rashist
+			if err := json.Unmarshal(v, &rashist); err != nil {
+				return errors.Wrap(err, "failed to unmarshal")
+			}
+			res = append(res, rashist)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (db *bboltStore) PutRashists(rashists []Rashist) error {
+	return db.db.Update(func(tx *bbolt.Tx) error {
+		bkt := tx.Bucket([]byte(rashistsBucket))
+		for _, rashist := range rashists {
+			if err := db.save(bkt, []byte(rashist.URL), rashist); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func (db *bboltStore) GetReportURLs() ([]string, error) {
 	res := make([]string, 0)
 	err := db.db.View(func(tx *bbolt.Tx) (err error) {
-		reportListBucket := tx.Bucket([]byte(reportsBucket))
-		cursor := reportListBucket.Cursor()
+		bkt := tx.Bucket([]byte(reportsBucket))
+		cursor := bkt.Cursor()
 		for k, _ := cursor.First(); k != nil; k, _ = cursor.Next() {
 			res = append(res, string(k))
 		}
@@ -65,8 +118,8 @@ func (db *bboltStore) PutReportURLs(urls []string) error {
 func (db *bboltStore) GetUsers() ([]User, error) {
 	res := make([]User, 0)
 	err := db.db.View(func(tx *bbolt.Tx) (err error) {
-		userBucket := tx.Bucket([]byte(usersBucket))
-		cursor := userBucket.Cursor()
+		bkt := tx.Bucket([]byte(usersBucket))
+		cursor := bkt.Cursor()
 		for k, v := cursor.First(); k != nil; k, v = cursor.Next() {
 			var user User
 			if err := json.Unmarshal(v, &user); err != nil {
@@ -86,8 +139,8 @@ func (db *bboltStore) GetUsers() ([]User, error) {
 func (db *bboltStore) GetUser(id int64) (User, error) {
 	var user User
 	err := db.db.View(func(tx *bbolt.Tx) (err error) {
-		chatsBkt := tx.Bucket([]byte(usersBucket))
-		return db.load(chatsBkt, []byte(strconv.FormatInt(id, 10)), &user)
+		bkt := tx.Bucket([]byte(usersBucket))
+		return db.load(bkt, []byte(strconv.FormatInt(id, 10)), &user)
 	})
 	if err != nil {
 		return User{}, err
@@ -97,15 +150,15 @@ func (db *bboltStore) GetUser(id int64) (User, error) {
 
 func (db *bboltStore) PutUser(user User) error {
 	return db.db.Update(func(tx *bbolt.Tx) error {
-		chatsBkt := tx.Bucket([]byte(usersBucket))
-		return db.save(chatsBkt, []byte(strconv.FormatInt(user.ID, 10)), user)
+		bkt := tx.Bucket([]byte(usersBucket))
+		return db.save(bkt, []byte(strconv.FormatInt(user.ID, 10)), user)
 	})
 }
 
 func (db *bboltStore) DeleteUser(id int64) error {
 	return db.db.Update(func(tx *bbolt.Tx) error {
-		chatsBkt := tx.Bucket([]byte(usersBucket))
-		return chatsBkt.Delete([]byte(strconv.FormatInt(id, 10)))
+		bkt := tx.Bucket([]byte(usersBucket))
+		return bkt.Delete([]byte(strconv.FormatInt(id, 10)))
 	})
 }
 
@@ -139,7 +192,7 @@ func (db *bboltStore) load(bkt *bbolt.Bucket, key []byte, res interface{}) error
 
 func (db *bboltStore) init() error {
 	return db.db.Update(func(tx *bbolt.Tx) (err error) {
-		bucketNames := []string{usersBucket, reportsBucket}
+		bucketNames := []string{usersBucket, reportsBucket, rashistsBucket}
 		for _, bucketName := range bucketNames {
 			if _, err = tx.CreateBucketIfNotExists([]byte(bucketName)); err != nil {
 				return errors.Wrapf(err, "can`t create %q bucket", bucketName)
