@@ -20,24 +20,24 @@ func (b *Bot) handleStartCommand(ctx context.Context, user store.User, chatID in
 }
 
 func (b *Bot) handleLoginCommand(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
-	if user.Phone != "" {
-		user.Chats[chatID].Navigation = store.PhoneNavigation
-		if err := b.db.PutUser(user); err != nil {
-			return err
-		}
-		return b.sendMsg(chatID, "Send phone number")
-	}
+	//if user.Phone != "" {
+	//	user.Chats[chatID].Navigation = store.PhoneNavigation
+	//	if err := b.db.PutUser(user); err != nil {
+	//		return err
+	//	}
+	//	return b.sendMsg(chatID, "Send phone number")
+	//}
 
-	user.Chats[chatID].Navigation = store.SharePhoneNavigation
+	user.Chats[chatID].Navigation = store.PhoneNavigation
 	if err := b.db.PutUser(user); err != nil {
 		return err
 	}
 
 	// getting user phone number
-	msg := tgbotapi.NewMessage(chatID, "Before SignIn you have to share phone number")
+	msg := tgbotapi.NewMessage(chatID, "Send a phone number. Number must start with +380 / 380")
 	msg.ReplyMarkup = tgbotapi.NewReplyKeyboard(
 		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButtonContact("\xF0\x9F\x93\x9E Send phone"),
+			tgbotapi.NewKeyboardButtonContact("\xF0\x9F\x93\x9E Send my phone number"),
 		),
 	)
 	resp, err := b.bot.Send(msg)

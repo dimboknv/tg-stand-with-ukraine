@@ -45,5 +45,6 @@ func (b *Bot) handleUpdate(ctx context.Context, u tgbotapi.Update) error {
 	if h, has := b.cmdHandlers[u.Message.Command()]; has {
 		handler = h
 	}
+
 	return handler(ctx, user, chatID, u)
 }

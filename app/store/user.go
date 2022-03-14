@@ -15,6 +15,8 @@ const (
 	Pass2faNavigation
 	UserNavigation
 	SharePhoneNavigation
+	CodeSplit1Navigation
+	CodeSplit2Navigation
 )
 
 type User struct {

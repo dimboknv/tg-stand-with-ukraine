@@ -117,6 +117,7 @@ func (b *Bot) Run(ctx context.Context) {
 			go func(u tgbotapi.Update) {
 				c, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 				defer cancel()
+				// todo recover
 				if err := b.handleUserErrorIfNeeded(u, b.handleUpdate(c, u)); err != nil {
 					b.log.Error("fail to handle user error", zap.Any("update", u), zap.Error(err))
 				}
@@ -138,6 +139,7 @@ func (b *Bot) handleUserErrorIfNeeded(u tgbotapi.Update, maybeUserErr error) err
 
 	if userErr := (&userError{}); errors.As(maybeUserErr, &userErr) {
 		txt = userErr.UserMsg
+		b.log.Info("get user input error", zap.Error(userErr))
 	} else {
 		b.log.Error("fail to handle update", zap.Any("update", u), zap.Error(maybeUserErr))
 	}

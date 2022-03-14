@@ -49,18 +49,30 @@ func parseChanelURLs(u tgbotapi.Update) []string {
 }
 
 func (b *Bot) phoneNavigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
-	phone := ""
+	phone, m := u.Message.Text, u.Message
 	switch {
-	case u.CallbackQuery != nil:
-		phone = u.CallbackQuery.Data
-		if err := b.sendMsg(chatID, fmt.Sprintf("use %s", phone)); err != nil {
-			return err
+	case m.ReplyToMessage != nil && m.ReplyToMessage.MessageID == user.Chats[chatID].ShareContactMsgID && m.Contact != nil:
+		phone = u.Message.Contact.PhoneNumber
+	case m.Contact != nil:
+		phone = m.Contact.PhoneNumber
+	}
+	phone = "+" + digitsRegexp.ReplaceAllString(phone, "")
+
+	//+380-44-xxx-xx-xx
+	if len(phone) != 13 {
+		return &userError{
+			Err:     errors.Errorf("invalid phone number: %s", phone),
+			UserMsg: "Invalid phone number. Try again /login",
 		}
-	case u.Message != nil:
-		phone = u.Message.Text
 	}
 
-	phone = "+" + digitsRegexp.ReplaceAllString(phone, "")
+	// send msg before starting auth for prevent active user client freezing with low msg id
+	msg := tgbotapi.NewMessage(chatID, "Send pass code")
+	msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(false)
+	if _, err := b.bot.Send(msg); err != nil {
+		return err
+	}
+
 	user.Chats[chatID].Navigation, user.Chats[chatID].AuthPhone = store.CodeNavigation, phone
 	if err := b.db.PutUser(user); err != nil {
 		return err
@@ -75,7 +87,7 @@ func (b *Bot) phoneNavigation(ctx context.Context, user store.User, chatID int64
 		return errors.Wrapf(err, "can`t start auth for %q", phone)
 	}
 
-	return b.sendMsg(chatID, "Send pass code")
+	return nil
 }
 
 func (b *Bot) codeNavigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
@@ -134,7 +146,7 @@ func (b *Bot) userNavigation(ctx context.Context, _ store.User, chatID int64, u 
 }
 
 func (b *Bot) sharePhoneNavigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
-	// nolint:lll
+	// nolint:lll // kj
 	if u.Message == nil || u.Message.ReplyToMessage == nil || u.Message.ReplyToMessage.MessageID != user.Chats[chatID].ShareContactMsgID || u.Message.Contact == nil {
 		return &userError{
 			Err:     errors.New("user don`t share phone number"),
