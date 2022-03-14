@@ -7,12 +7,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/dimboknv/tg-stand-with-ukraine/app/reporter"
-
 	"github.com/dimboknv/tg-stand-with-ukraine/app/bot"
 	"github.com/dimboknv/tg-stand-with-ukraine/app/hub"
+	"github.com/dimboknv/tg-stand-with-ukraine/app/reporter"
 	"github.com/dimboknv/tg-stand-with-ukraine/app/store"
-
 	"github.com/jessevdk/go-flags"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"

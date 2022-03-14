@@ -7,9 +7,7 @@ import (
 	"strings"
 
 	"github.com/dimboknv/tg-stand-with-ukraine/app/hub"
-
 	"github.com/dimboknv/tg-stand-with-ukraine/app/store"
-
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/pkg/errors"
 )
@@ -48,32 +46,53 @@ func parseChanelURLs(u tgbotapi.Update) []string {
 	return urls
 }
 
-func (b *Bot) phoneNavigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
-	phone, m := u.Message.Text, u.Message
+// nolint:gocyclo // user has many input sources
+func getMessageText(user store.User, chatID int64, u tgbotapi.Update) string {
+	msg, cbq, userChat := u.Message, u.CallbackQuery, user.Chats[chatID]
 	switch {
-	case m.ReplyToMessage != nil && m.ReplyToMessage.MessageID == user.Chats[chatID].ShareContactMsgID && m.Contact != nil:
-		phone = u.Message.Contact.PhoneNumber
-	case m.Contact != nil:
-		phone = m.Contact.PhoneNumber
+	case cbq != nil && cbq.Message != nil && cbq.Message.MessageID == userChat.ReplyMsgID:
+		return cbq.Data
+	case msg != nil && msg.ReplyToMessage != nil && msg.ReplyToMessage.MessageID == userChat.ReplyMsgID && msg.Contact != nil:
+		return msg.Contact.PhoneNumber
+	case msg != nil && msg.Contact != nil:
+		return msg.Contact.PhoneNumber
+	case u.Message != nil:
+		return u.Message.Text
+	default:
+		return ""
 	}
-	phone = "+" + digitsRegexp.ReplaceAllString(phone, "")
+}
 
+func parsePhone(txt string) (phone string, err error) {
+	phone = "+" + digitsRegexp.ReplaceAllString(txt, "")
 	//+380-44-xxx-xx-xx
 	if len(phone) != 13 {
-		return &userError{
-			Err:     errors.Errorf("invalid phone number: %s", phone),
+		return "", &userError{
+			Err:     errors.Errorf("invalid phone number: %q", phone),
 			UserMsg: "Invalid phone number. Try again /login",
 		}
 	}
+	return phone, nil
+}
 
-	// send msg before starting auth for prevent active user client freezing with low msg id
-	msg := tgbotapi.NewMessage(chatID, "Send pass code")
-	msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(false)
-	if _, err := b.bot.Send(msg); err != nil {
+func (b *Bot) phoneNavigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
+	phone, err := parsePhone(getMessageText(user, chatID, u))
+	if err != nil {
 		return err
 	}
 
-	user.Chats[chatID].Navigation, user.Chats[chatID].AuthPhone = store.CodeNavigation, phone
+	txt, navigation := "Send pass code", store.CodeNavigation
+	if phone == user.Phone {
+		// nolint
+		txt = `You are trying to sign-in with you current account and telegram does not allow to send secure code in one message to anyone.
+
+Please, split secure code and send by 2 messages. For example, you got "12345" then send 1-th message with text "123" and 2-th message with "45". You can split code in any combination except full code.
+
+Send 1-th part`
+		navigation = store.SplitCode1Navigation
+	}
+
+	user.Chats[chatID].Navigation, user.Chats[chatID].AuthPhone = navigation, phone
 	if err := b.db.PutUser(user); err != nil {
 		return err
 	}
@@ -87,11 +106,36 @@ func (b *Bot) phoneNavigation(ctx context.Context, user store.User, chatID int64
 		return errors.Wrapf(err, "can`t start auth for %q", phone)
 	}
 
+	msg := tgbotapi.NewMessage(chatID, txt)
+	msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(false)
+	if _, err := b.bot.Send(msg); err != nil {
+		return err
+	}
 	return nil
 }
 
+func (b *Bot) splitCode1Navigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
+	user.Chats[chatID].Navigation = store.SplitCode2Navigation
+	user.Chats[chatID].AuthCode = strings.TrimSpace(getMessageText(user, chatID, u))
+	if err := b.db.PutUser(user); err != nil {
+		return err
+	}
+	return b.sendMsg(chatID, "Send 2-th part")
+}
+
+func (b *Bot) splitCode2Navigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
+	user.Chats[chatID].AuthCode += strings.TrimSpace(getMessageText(user, chatID, u))
+	if err := b.db.PutUser(user); err != nil {
+		return err
+	}
+	return b.startHubAuth(ctx, user, chatID, user.Chats[chatID].AuthCode)
+}
+
 func (b *Bot) codeNavigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
-	code := strings.TrimSpace(u.Message.Text)
+	return b.startHubAuth(ctx, user, chatID, strings.TrimSpace(getMessageText(user, chatID, u)))
+}
+
+func (b *Bot) startHubAuth(ctx context.Context, user store.User, chatID int64, code string) error {
 	req2fa, err := b.hub.AuthCode(ctx, user, user.Chats[chatID].AuthPhone, code)
 	if err != nil {
 		return &userError{
@@ -103,7 +147,7 @@ func (b *Bot) codeNavigation(ctx context.Context, user store.User, chatID int64,
 	if user, err = b.db.GetUser(user.ID); err != nil {
 		return err
 	}
-	msg := "Thanks!"
+	msg := fmt.Sprintf("Thanks! %q is successfully sign in!", user.Chats[chatID].AuthPhone)
 	user.Chats[chatID].Navigation = store.UserNavigation
 	if req2fa {
 		msg = "Send 2FA code"
@@ -116,7 +160,7 @@ func (b *Bot) codeNavigation(ctx context.Context, user store.User, chatID int64,
 }
 
 func (b *Bot) pass2faNavigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
-	pass2fa := strings.TrimSpace(u.Message.Text)
+	pass2fa := strings.TrimSpace(getMessageText(user, chatID, u))
 	user.Chats[chatID].Navigation = store.UserNavigation
 	if err := b.db.PutUser(user); err != nil {
 		return err
@@ -127,10 +171,10 @@ func (b *Bot) pass2faNavigation(ctx context.Context, user store.User, chatID int
 			UserMsg: "Sorry, can't verify 2FA password",
 		}
 	}
-	return b.sendMsg(chatID, "Thanks")
+	return b.sendMsg(chatID, fmt.Sprintf("Thanks! %q is successfully sign in!", user.Chats[chatID].AuthPhone))
 }
 
-func (b *Bot) userNavigation(ctx context.Context, _ store.User, chatID int64, u tgbotapi.Update) error {
+func (b *Bot) userNavigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
 	if _, has := b.admins[u.SentFrom().UserName]; !has {
 		return nil
 	}
@@ -142,19 +186,16 @@ func (b *Bot) userNavigation(ctx context.Context, _ store.User, chatID int64, u 
 	}
 
 	// todo replay to the msg
-	return b.sendMsg(u.FromChat().ID, fmt.Sprintf("%d urls added", len(urls)))
+	return b.sendMsg(chatID, fmt.Sprintf("%d urls added", len(urls)))
 }
 
 func (b *Bot) sharePhoneNavigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
-	// nolint:lll // kj
-	if u.Message == nil || u.Message.ReplyToMessage == nil || u.Message.ReplyToMessage.MessageID != user.Chats[chatID].ShareContactMsgID || u.Message.Contact == nil {
-		return &userError{
-			Err:     errors.New("user don`t share phone number"),
-			UserMsg: "You have to share phone number by \"Send phone\" button. Try again /login",
-		}
+	phone, err := parsePhone(getMessageText(user, chatID, u))
+	if err != nil {
+		return err
 	}
 
-	user.Phone = "+" + u.Message.Contact.PhoneNumber
+	user.Phone = phone
 	user.Chats[chatID].Navigation = store.PhoneNavigation
 	if err := b.db.PutUser(user); err != nil {
 		return err
@@ -165,10 +206,20 @@ func (b *Bot) sharePhoneNavigation(ctx context.Context, user store.User, chatID 
 	if _, err := b.bot.Send(msg); err != nil {
 		return err
 	}
-	msg = tgbotapi.NewMessage(chatID, "Send phone number")
-	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData(user.Phone, user.Phone)))
 
-	_, err := b.bot.Send(msg)
-	return err
+	return b.sendInlineKbWithPhone(user, chatID, phone)
+}
+
+func (b *Bot) sendInlineKbWithPhone(user store.User, chatID int64, phone string) error {
+	msg := tgbotapi.NewMessage(chatID, "Send phone number")
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData(phone, phone)),
+	)
+
+	resp, err := b.bot.Send(msg)
+	if err != nil {
+		return err
+	}
+	user.Chats[chatID].ReplyMsgID = resp.MessageID
+	return b.db.PutUser(user)
 }

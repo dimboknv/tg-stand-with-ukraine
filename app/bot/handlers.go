@@ -16,6 +16,8 @@ func (b *Bot) registerHandlers() {
 		store.CodeNavigation:       b.codeNavigation,
 		store.PhoneNavigation:      b.phoneNavigation,
 		store.SharePhoneNavigation: b.sharePhoneNavigation,
+		store.SplitCode1Navigation: b.splitCode1Navigation,
+		store.SplitCode2Navigation: b.splitCode2Navigation,
 	}
 
 	b.cmdHandlers = map[string]handler{

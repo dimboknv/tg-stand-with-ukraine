@@ -15,8 +15,8 @@ const (
 	Pass2faNavigation
 	UserNavigation
 	SharePhoneNavigation
-	CodeSplit1Navigation
-	CodeSplit2Navigation
+	SplitCode1Navigation
+	SplitCode2Navigation
 )
 
 type User struct {
@@ -27,10 +27,11 @@ type User struct {
 }
 
 type Chat struct {
-	AuthPhone         string
-	ID                int64
-	ShareContactMsgID int
-	Navigation        Navigation
+	AuthPhone  string
+	AuthCode   string
+	ID         int64
+	ReplyMsgID int
+	Navigation Navigation
 }
 
 type Client struct {
