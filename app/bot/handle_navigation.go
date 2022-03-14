@@ -48,14 +48,23 @@ func parseChanelURLs(u tgbotapi.Update) []string {
 	return urls
 }
 
-func (b *Bot) phoneNavigation(ctx context.Context, user store.User, u tgbotapi.Update) error {
-	phone := "+" + digitsRegexp.ReplaceAllString(u.Message.Text, "")
-	chatID := u.Message.Chat.ID
-	user.Chats[chatID].Navigation, user.Chats[chatID].Phone = store.CodeNavigation, phone
+func (b *Bot) phoneNavigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
+	phone := ""
+	switch {
+	case u.CallbackQuery != nil:
+		phone = u.CallbackQuery.Data
+		if err := b.sendMsg(chatID, fmt.Sprintf("use %s", phone)); err != nil {
+			return err
+		}
+	case u.Message != nil:
+		phone = u.Message.Text
+	}
+
+	phone = "+" + digitsRegexp.ReplaceAllString(phone, "")
+	user.Chats[chatID].Navigation, user.Chats[chatID].AuthPhone = store.CodeNavigation, phone
 	if err := b.db.PutUser(user); err != nil {
 		return err
 	}
-
 	if err := b.hub.AuthPhone(ctx, user, phone); err != nil {
 		if errors.Is(err, hub.AlreadyAuthorizedErr) {
 			return &userError{
@@ -69,14 +78,12 @@ func (b *Bot) phoneNavigation(ctx context.Context, user store.User, u tgbotapi.U
 	return b.sendMsg(chatID, "Send pass code")
 }
 
-func (b *Bot) codeNavigation(ctx context.Context, user store.User, u tgbotapi.Update) error {
+func (b *Bot) codeNavigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
 	code := strings.TrimSpace(u.Message.Text)
-	chatID := u.Message.Chat.ID
-
-	req2fa, err := b.hub.AuthCode(ctx, user, user.Chats[chatID].Phone, code)
+	req2fa, err := b.hub.AuthCode(ctx, user, user.Chats[chatID].AuthPhone, code)
 	if err != nil {
 		return &userError{
-			Err:     errors.Wrapf(err, "can`t verify code for %q", user.Chats[chatID].Phone),
+			Err:     errors.Wrapf(err, "can`t verify code for %q", user.Chats[chatID].AuthPhone),
 			UserMsg: "Sorry, can't verify code",
 		}
 	}
@@ -96,23 +103,22 @@ func (b *Bot) codeNavigation(ctx context.Context, user store.User, u tgbotapi.Up
 	return b.sendMsg(chatID, msg)
 }
 
-func (b *Bot) pass2faNavigation(ctx context.Context, user store.User, u tgbotapi.Update) error {
+func (b *Bot) pass2faNavigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
 	pass2fa := strings.TrimSpace(u.Message.Text)
-	chatID := u.Message.Chat.ID
 	user.Chats[chatID].Navigation = store.UserNavigation
 	if err := b.db.PutUser(user); err != nil {
 		return err
 	}
-	if err := b.hub.AuthPass2FA(ctx, user, user.Chats[chatID].Phone, pass2fa); err != nil {
+	if err := b.hub.AuthPass2FA(ctx, user, user.Chats[chatID].AuthPhone, pass2fa); err != nil {
 		return &userError{
-			Err:     errors.Wrapf(err, "can`t verify 2FA password for %q", user.Chats[chatID].Phone),
+			Err:     errors.Wrapf(err, "can`t verify 2FA password for %q", user.Chats[chatID].AuthPhone),
 			UserMsg: "Sorry, can't verify 2FA password",
 		}
 	}
 	return b.sendMsg(chatID, "Thanks")
 }
 
-func (b *Bot) userNavigation(ctx context.Context, _ store.User, u tgbotapi.Update) error {
+func (b *Bot) userNavigation(ctx context.Context, _ store.User, chatID int64, u tgbotapi.Update) error {
 	if _, has := b.admins[u.SentFrom().UserName]; !has {
 		return nil
 	}
@@ -124,5 +130,33 @@ func (b *Bot) userNavigation(ctx context.Context, _ store.User, u tgbotapi.Updat
 	}
 
 	// todo replay to the msg
-	return b.sendMsg(u.Message.Chat.ID, fmt.Sprintf("%d urls added", len(urls)))
+	return b.sendMsg(u.FromChat().ID, fmt.Sprintf("%d urls added", len(urls)))
+}
+
+func (b *Bot) sharePhoneNavigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
+	// nolint:lll
+	if u.Message == nil || u.Message.ReplyToMessage == nil || u.Message.ReplyToMessage.MessageID != user.Chats[chatID].ShareContactMsgID || u.Message.Contact == nil {
+		return &userError{
+			Err:     errors.New("user don`t share phone number"),
+			UserMsg: "You have to share phone number by \"Send phone\" button. Try again /login",
+		}
+	}
+
+	user.Phone = "+" + u.Message.Contact.PhoneNumber
+	user.Chats[chatID].Navigation = store.PhoneNavigation
+	if err := b.db.PutUser(user); err != nil {
+		return err
+	}
+
+	msg := tgbotapi.NewMessage(chatID, "Thank")
+	msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(false)
+	if _, err := b.bot.Send(msg); err != nil {
+		return err
+	}
+	msg = tgbotapi.NewMessage(chatID, "Send phone number")
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData(user.Phone, user.Phone)))
+
+	_, err := b.bot.Send(msg)
+	return err
 }
