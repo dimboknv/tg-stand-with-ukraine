@@ -14,9 +14,9 @@ type UserStore interface {
 }
 
 type StoreSession struct {
-	user  store.User
 	db    UserStore
 	phone string
+	user  store.User
 }
 
 func NewStoreSession(user store.User, phone string, db UserStore) *StoreSession {

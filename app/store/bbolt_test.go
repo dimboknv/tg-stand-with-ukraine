@@ -35,12 +35,9 @@ func prep(t *testing.T) (db *bboltStore, teardown func()) {
 					Session: []byte("session1"),
 				},
 			},
-			Chats: map[int64]*struct {
-				Phone      string
-				Navigation Navigation
-			}{
+			Chats: map[int64]*Chat{
 				1: {
-					Phone:      "+987654321",
+					AuthPhone:  "+987654321",
 					Navigation: 1,
 				},
 			},
@@ -57,12 +54,9 @@ func prep(t *testing.T) (db *bboltStore, teardown func()) {
 					Session: []byte("session2"),
 				},
 			},
-			Chats: map[int64]*struct {
-				Phone      string
-				Navigation Navigation
-			}{
+			Chats: map[int64]*Chat{
 				2: {
-					Phone:      "+987654321",
+					AuthPhone:  "+987654321",
 					Navigation: 2,
 				},
 			},

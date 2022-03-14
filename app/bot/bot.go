@@ -70,30 +70,21 @@ func (b *Bot) getUser(u tgbotapi.Update) (store.User, error) {
 		return store.User{}, errors.Errorf("can`t get message sender")
 	}
 
-	chatID := u.Message.Chat.ID
+	chatID := u.FromChat().ID
 	user, err := b.db.GetUser(u.SentFrom().ID)
 	if err != nil {
 		if !errors.Is(err, store.NotFoundError) {
 			return store.User{}, errors.Wrap(err, "can`t get user")
 		}
 		user = store.User{
-			Chats: map[int64]*struct {
-				Phone      string
-				Navigation store.Navigation
-			}{
-				chatID: {
-					Navigation: store.UserNavigation,
-				},
-			},
-			ID: u.SentFrom().ID,
+			Chats: map[int64]*store.Chat{},
+			ID:    u.SentFrom().ID,
 		}
 	}
 	if _, has := user.Chats[chatID]; !has {
-		user.Chats[chatID] = &struct {
-			Phone      string
-			Navigation store.Navigation
-		}{
+		user.Chats[chatID] = &store.Chat{
 			Navigation: store.UserNavigation,
+			ID:         chatID,
 		}
 	}
 	return user, nil
@@ -126,6 +117,7 @@ func (b *Bot) Run(ctx context.Context) {
 			go func(u tgbotapi.Update) {
 				c, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 				defer cancel()
+				// todo recover
 				if err := b.handleUserErrorIfNeeded(u, b.handleUpdate(c, u)); err != nil {
 					b.log.Error("fail to handle user error", zap.Any("update", u), zap.Error(err))
 				}
@@ -142,22 +134,25 @@ func (b *Bot) handleUserErrorIfNeeded(u tgbotapi.Update, maybeUserErr error) err
 		return nil
 	}
 
-	chatID := u.Message.Chat.ID
-	msg := "Ops, something goes wrong :("
+	chatID := u.FromChat().ID
+	txt := "Ops, something goes wrong :("
 
 	if userErr := (&userError{}); errors.As(maybeUserErr, &userErr) {
-		msg = userErr.UserMsg
+		txt = userErr.UserMsg
+		b.log.Info("get user input error", zap.Error(userErr))
 	} else {
 		b.log.Error("fail to handle update", zap.Any("update", u), zap.Error(maybeUserErr))
 	}
 
-	if err := b.sendMsg(chatID, msg); err != nil {
+	msg := tgbotapi.NewMessage(chatID, txt)
+	msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(false)
+	if _, err := b.bot.Send(msg); err != nil {
 		return err
 	}
 	user, err := b.getUser(u)
 	if err != nil {
 		return err
 	}
-	user.Chats[u.Message.Chat.ID].Navigation = store.UserNavigation
+	user.Chats[u.FromChat().ID].Navigation = store.UserNavigation
 	return b.db.PutUser(user)
 }

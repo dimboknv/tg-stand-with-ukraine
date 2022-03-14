@@ -14,18 +14,28 @@ const (
 	CodeNavigation
 	Pass2faNavigation
 	UserNavigation
+	SharePhoneNavigation
+	SplitCode1Navigation
+	SplitCode2Navigation
 )
 
 type User struct {
-	Clients map[string]*Client  // [phone]client
-	Chats   map[int64]*struct { // [chatID]struct
-		Phone      string
-		Navigation Navigation
-	}
-	ID int64
+	Clients map[string]*Client // [phone]client
+	Chats   map[int64]*Chat    // [chatID]struct
+	Phone   string
+	ID      int64
+}
+
+type Chat struct {
+	AuthPhone  string
+	AuthCode   string
+	ID         int64
+	ReplyMsgID int
+	Navigation Navigation
 }
 
 type Client struct {
+	Phone       string
 	SentReports map[string]Report // [url]report
 	Session     []byte
 }
