@@ -121,7 +121,7 @@ func (b *Bot) Run(ctx context.Context) {
 					}
 				}()
 
-				c, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+				c, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 				defer cancel()
 				if err := b.handleUserErrorIfNeeded(u, b.handleUpdate(c, u)); err != nil {
 					b.log.Error("fail to handle user error", zap.Any("update", u), zap.Error(err))
