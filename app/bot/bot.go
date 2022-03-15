@@ -115,9 +115,14 @@ func (b *Bot) Run(ctx context.Context) {
 		select {
 		case u := <-updates:
 			go func(u tgbotapi.Update) {
+				defer func() {
+					if r := recover(); r != nil {
+						b.log.Warn("runtime panic", zap.Any("recover", r))
+					}
+				}()
+
 				c, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 				defer cancel()
-				// todo recover
 				if err := b.handleUserErrorIfNeeded(u, b.handleUpdate(c, u)); err != nil {
 					b.log.Error("fail to handle user error", zap.Any("update", u), zap.Error(err))
 				}
