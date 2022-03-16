@@ -28,7 +28,7 @@ func main() {
 	var opts Opts
 	p := flags.NewParser(&opts, flags.HelpFlag|flags.PassDoubleDash)
 	p.CommandHandler = func(command flags.Commander, args []string) error {
-		logger, _ := zap.NewDevelopment()
+		logger := newLogger(opts.Debug)
 		defer func() {
 			_ = logger.Sync()
 		}()
@@ -61,4 +61,21 @@ func main() {
 		_, _ = fmt.Fprintln(w, err)
 		os.Exit(code)
 	}
+}
+
+func newLogger(debug bool) *zap.Logger {
+	level := zap.NewAtomicLevelAt(zap.InfoLevel)
+	if debug {
+		level = zap.NewAtomicLevelAt(zap.DebugLevel)
+	}
+	cfg := zap.Config{
+		Level:            level,
+		Development:      debug,
+		Encoding:         "console",
+		EncoderConfig:    zap.NewDevelopmentEncoderConfig(),
+		OutputPaths:      []string{"stderr"},
+		ErrorOutputPaths: []string{"stderr"},
+	}
+	logger, _ := cfg.Build()
+	return logger
 }
