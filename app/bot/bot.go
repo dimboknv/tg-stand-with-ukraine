@@ -64,6 +64,48 @@ func New(opts Opts) (*Bot, error) {
 	}, nil
 }
 
+func (b *Bot) Run(ctx context.Context) error {
+	b.registerHandlers()
+	updateConfig := tgbotapi.NewUpdate(0)
+	updateConfig.Timeout = 60
+	updates := b.bot.GetUpdatesChan(updateConfig)
+
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		return b.reporter.Run(ctx)
+	})
+	g.Go(func() error {
+		return b.hub.Run(ctx)
+	})
+	g.Go(func() error {
+		b.log.Info("start listen for updates...")
+		defer b.log.Info("stop listen for updates")
+		defer b.bot.StopReceivingUpdates()
+
+		for {
+			select {
+			case u := <-updates:
+				go func(u tgbotapi.Update) {
+					defer func() {
+						if r := recover(); r != nil {
+							b.log.Warn("runtime panic", zap.Any("recover", r))
+						}
+					}()
+
+					c, cancel := context.WithTimeout(ctx, 60*time.Second)
+					defer cancel()
+					if err := b.handleUserErrorIfNeeded(u, b.handleUpdate(c, u)); err != nil {
+						b.log.Error("fail to handle user error", zap.Any("update", u), zap.Error(err))
+					}
+				}(u)
+			case <-ctx.Done():
+				return nil
+			}
+		}
+	})
+	return g.Wait()
+}
+
 func (b *Bot) getUser(u tgbotapi.Update) (store.User, error) {
 	if u.SentFrom() == nil {
 		return store.User{}, errors.Errorf("can`t get message sender")
@@ -100,46 +142,6 @@ func (b *Bot) sendMsg(chatID int64, msg string) error {
 
 func (b *Bot) sendWelcomeMsg(chatID int64) error {
 	return b.sendMsg(chatID, "Welcome to reporter bot. You need to give me access to your telegram account. Stand with Ukraine!")
-}
-
-func (b *Bot) Run(ctx context.Context) error {
-	b.registerHandlers()
-	updateConfig := tgbotapi.NewUpdate(0)
-	updateConfig.Timeout = 60
-	updates := b.bot.GetUpdatesChan(updateConfig)
-
-	g, ctx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		return b.reporter.Run(ctx)
-	})
-	g.Go(func() error {
-		return b.hub.Run(ctx)
-	})
-	g.Go(func() error {
-		b.log.Info("start listen for updates...")
-		for {
-			select {
-			case u := <-updates:
-				go func(u tgbotapi.Update) {
-					defer func() {
-						if r := recover(); r != nil {
-							b.log.Warn("runtime panic", zap.Any("recover", r))
-						}
-					}()
-
-					c, cancel := context.WithTimeout(ctx, 60*time.Second)
-					defer cancel()
-					if err := b.handleUserErrorIfNeeded(u, b.handleUpdate(c, u)); err != nil {
-						b.log.Error("fail to handle user error", zap.Any("update", u), zap.Error(err))
-					}
-				}(u)
-			case <-ctx.Done():
-				b.log.Info("stop listen for updates")
-				return nil
-			}
-		}
-	})
-	return g.Wait()
 }
 
 func (b *Bot) handleUserErrorIfNeeded(u tgbotapi.Update, maybeUserErr error) error {
