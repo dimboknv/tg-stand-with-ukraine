@@ -185,8 +185,10 @@ func (b *Bot) userNavigation(ctx context.Context, user store.User, chatID int64,
 		return err
 	}
 
-	// todo replay to the msg
-	return b.sendMsg(chatID, fmt.Sprintf("%d urls added", len(urls)))
+	msg := tgbotapi.NewMessage(chatID, fmt.Sprintf("%d new urls added", len(urls)))
+	msg.ReplyToMessageID = u.Message.MessageID
+	_, err := b.bot.Send(msg)
+	return err
 }
 
 func (b *Bot) sharePhoneNavigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
