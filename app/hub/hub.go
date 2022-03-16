@@ -23,17 +23,18 @@ import (
 )
 
 type Hub struct {
-	db            store.Store
-	ctx           context.Context
-	clients       map[string]*telegram.Client // [userIDphone]client
-	phoneCodeHash map[string]string           // [userIDphone]codeHash
-	mu            *sync.RWMutex
-	log           *zap.Logger
-	publicKey     *rsa.PublicKey
-	deviceModel   string
-	appVersion    string
-	appHash       string
-	dcOption      struct {
+	db             store.Store
+	ctx            context.Context
+	phoneCodeHash  map[string]string           // [userIDphone]codeHash
+	clients        map[string]*telegram.Client // [userIDphone]client
+	startedClients *sync.WaitGroup
+	mu             *sync.RWMutex
+	log            *zap.Logger
+	publicKey      *rsa.PublicKey
+	deviceModel    string
+	appVersion     string
+	appHash        string
+	dcOption       struct {
 		IPAddress string
 		ID        int
 		Port      int
@@ -67,18 +68,19 @@ var (
 func NewHub(opts Opts) *Hub {
 	rand.Seed(time.Now().UnixNano())
 	return &Hub{
-		ctx:           opts.Context,
-		db:            opts.DB,
-		clients:       map[string]*telegram.Client{},
-		phoneCodeHash: map[string]string{},
-		mu:            &sync.RWMutex{},
-		log:           opts.Logger,
-		publicKey:     opts.PublicKey,
-		deviceModel:   opts.DeviceModel,
-		appVersion:    opts.AppVersion,
-		appHash:       opts.AppHash,
-		appID:         opts.AppID,
-		clientTTL:     opts.ClientTTL,
+		startedClients: &sync.WaitGroup{},
+		ctx:            opts.Context,
+		db:             opts.DB,
+		clients:        map[string]*telegram.Client{},
+		phoneCodeHash:  map[string]string{},
+		mu:             &sync.RWMutex{},
+		log:            opts.Logger,
+		publicKey:      opts.PublicKey,
+		deviceModel:    opts.DeviceModel,
+		appVersion:     opts.AppVersion,
+		appHash:        opts.AppHash,
+		appID:          opts.AppID,
+		clientTTL:      opts.ClientTTL,
 		dcOption: struct {
 			IPAddress string
 			ID        int
@@ -198,6 +200,7 @@ func (h *Hub) newClient(user store.User, phone string) *telegram.Client {
 func (h *Hub) makeClient(user store.User, phone string, onConnectActions ...action) (*telegram.Client, error) {
 	client := h.newClient(user, phone)
 	withErrCh := make(chan error, 1)
+	h.startedClients.Add(1)
 
 	h.mu.Lock()
 	h.clients[key(user.ID, phone)] = client
@@ -207,6 +210,7 @@ func (h *Hub) makeClient(user store.User, phone string, onConnectActions ...acti
 
 	go func() {
 		defer func() {
+			h.startedClients.Done()
 			cancel()
 			h.mu.Lock()
 			delete(h.clients, key(user.ID, phone))
@@ -285,6 +289,12 @@ func (h *Hub) getClient(userID int64, phone string) (*telegram.Client, error) {
 		return nil, errors.New("client is not running")
 	}
 	return client, nil
+}
+
+func (h *Hub) Run(ctx context.Context) error {
+	<-ctx.Done()
+	h.startedClients.Wait()
+	return nil
 }
 
 func key(userID int64, phone string) string {

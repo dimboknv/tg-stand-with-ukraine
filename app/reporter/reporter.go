@@ -200,7 +200,7 @@ func (r *Reporter) AddRashists(_ context.Context, urls []string) error {
 	return nil
 }
 
-func (r *Reporter) Run(ctx context.Context) {
+func (r *Reporter) Run(ctx context.Context) error {
 	ticker := time.NewTicker(r.interval)
 	defer ticker.Stop()
 	r.log.Info("reporter is started", zap.Duration("interval", r.interval))
@@ -221,7 +221,7 @@ func (r *Reporter) Run(ctx context.Context) {
 				r.log.Info("reporting is done")
 			}()
 		case <-ctx.Done():
-			return
+			return nil
 		}
 	}
 }

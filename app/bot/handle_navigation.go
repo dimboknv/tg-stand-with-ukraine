@@ -15,6 +15,7 @@ import (
 var (
 	tmeRegexp      = regexp.MustCompile(`(?m)(http://www\.|https://www\.|http://|https://)?t\.me/[^\s]*`)
 	usernameRegexp = regexp.MustCompile(`(?m)@\S*`)
+	digitsRegexp   = regexp.MustCompile(`\D+`)
 )
 
 func parseChanelURLs(u tgbotapi.Update) []string {

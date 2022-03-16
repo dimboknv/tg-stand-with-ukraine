@@ -118,7 +118,6 @@ func (cmd *BotCmd) Execute(_ []string) error {
 		return errors.Wrap(err, "can`t create bot")
 	}
 
-	b.Run(ctx)
-	cmd.Logger.Info("\"bot\" command succeeded terminated")
-	return nil
+	defer cmd.Logger.Info("\"bot\" command is terminated")
+	return b.Run(ctx)
 }

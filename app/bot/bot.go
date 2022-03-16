@@ -3,8 +3,9 @@ package bot
 import (
 	"context"
 	"net/http"
-	"regexp"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/dimboknv/tg-stand-with-ukraine/app/reporter"
 
@@ -25,8 +26,6 @@ type Opts struct {
 	Admins   []string
 	Debug    bool
 }
-
-var digitsRegexp = regexp.MustCompile(`\D+`)
 
 type Bot struct {
 	hub         *hub.Hub
@@ -103,35 +102,44 @@ func (b *Bot) sendWelcomeMsg(chatID int64) error {
 	return b.sendMsg(chatID, "Welcome to reporter bot. You need to give me access to your telegram account. Stand with Ukraine!")
 }
 
-func (b *Bot) Run(ctx context.Context) {
+func (b *Bot) Run(ctx context.Context) error {
+	b.registerHandlers()
 	updateConfig := tgbotapi.NewUpdate(0)
 	updateConfig.Timeout = 60
 	updates := b.bot.GetUpdatesChan(updateConfig)
-	b.registerHandlers()
-	go b.reporter.Run(ctx)
 
-	b.log.Info("start listen for updates...")
-	for {
-		select {
-		case u := <-updates:
-			go func(u tgbotapi.Update) {
-				defer func() {
-					if r := recover(); r != nil {
-						b.log.Warn("runtime panic", zap.Any("recover", r))
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		return b.reporter.Run(ctx)
+	})
+	g.Go(func() error {
+		return b.hub.Run(ctx)
+	})
+	g.Go(func() error {
+		b.log.Info("start listen for updates...")
+		for {
+			select {
+			case u := <-updates:
+				go func(u tgbotapi.Update) {
+					defer func() {
+						if r := recover(); r != nil {
+							b.log.Warn("runtime panic", zap.Any("recover", r))
+						}
+					}()
+
+					c, cancel := context.WithTimeout(ctx, 60*time.Second)
+					defer cancel()
+					if err := b.handleUserErrorIfNeeded(u, b.handleUpdate(c, u)); err != nil {
+						b.log.Error("fail to handle user error", zap.Any("update", u), zap.Error(err))
 					}
-				}()
-
-				c, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-				defer cancel()
-				if err := b.handleUserErrorIfNeeded(u, b.handleUpdate(c, u)); err != nil {
-					b.log.Error("fail to handle user error", zap.Any("update", u), zap.Error(err))
-				}
-			}(u)
-		case <-ctx.Done():
-			b.log.Info("stop listen for updates")
-			return
+				}(u)
+			case <-ctx.Done():
+				b.log.Info("stop listen for updates")
+				return nil
+			}
 		}
-	}
+	})
+	return g.Wait()
 }
 
 func (b *Bot) handleUserErrorIfNeeded(u tgbotapi.Update, maybeUserErr error) error {
