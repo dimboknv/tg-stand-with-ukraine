@@ -59,7 +59,9 @@ func (s *StoreSession) StoreSession(ctx context.Context, data []byte) error {
 	}
 
 	if _, ok := user.Clients[s.phone]; !ok {
-		user.Clients[s.phone] = &store.Client{}
+		user.Clients[s.phone] = &store.Client{
+			SentReports: map[string]store.Report{},
+		}
 	}
 	user.Clients[s.phone].Session = data
 

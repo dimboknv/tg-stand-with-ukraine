@@ -35,9 +35,12 @@ type Chat struct {
 }
 
 type Client struct {
-	Phone       string
-	SentReports map[string]Report // [url]report
-	Session     []byte
+	LastConnectionAt time.Time
+	SignInAt         time.Time
+	SentReports      map[string]Report // [url]report
+	Phone            string
+	Session          []byte
+	IsAuthorized     bool
 }
 
 type Report struct {

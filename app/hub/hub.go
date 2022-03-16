@@ -10,12 +10,14 @@ import (
 
 	"github.com/dimboknv/tg-stand-with-ukraine/app/store"
 	"github.com/gotd/contrib/middleware/floodwait"
+	"github.com/gotd/td/bin"
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/auth"
 	"github.com/gotd/td/telegram/dcs"
 	"github.com/gotd/td/telegram/message"
 	"github.com/gotd/td/telegram/message/peer"
 	"github.com/gotd/td/tg"
+	"github.com/gotd/td/tgerr"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -98,7 +100,7 @@ func (h *Hub) AppHash() string {
 }
 
 func (h *Hub) SendReport(ctx context.Context, user store.User, phone, url, msg string) (store.Report, error) {
-	client, err := h.getOrMakeClient(user, phone, checkAuthorization)
+	client, err := h.getOrMakeClient(user, phone, updateLastConnectionAt(h.db), updateIsAuthorized(h.db), requireAuthorized)
 	if err != nil {
 		return store.Report{}, err
 	}
@@ -106,7 +108,7 @@ func (h *Hub) SendReport(ctx context.Context, user store.User, phone, url, msg s
 }
 
 func (h *Hub) AuthPhone(ctx context.Context, user store.User, phone string) error {
-	client, err := h.getOrMakeClient(user, phone, noop)
+	client, err := h.getOrMakeClient(user, phone, updateLastConnectionAt(h.db), updateIsAuthorized(h.db))
 	if err != nil {
 		return err
 	}
@@ -146,7 +148,7 @@ func (h *Hub) AuthCode(ctx context.Context, user store.User, phone, code string)
 		return false, err
 	}
 	if authorized {
-		return false, nil
+		return false, chain(updateSignInAt(h.db), updateIsAuthorized(h.db))(ctx, client, user, phone)
 	}
 
 	_, signInErr := client.Auth().SignIn(ctx, phone, code, codeHash)
@@ -165,7 +167,7 @@ func (h *Hub) AuthPass2FA(ctx context.Context, user store.User, phone, pass2fa s
 	if _, err := client.Auth().Password(ctx, pass2fa); err != nil {
 		return errors.Wrap(err, "invalid 2fa")
 	}
-	return nil
+	return chain(updateSignInAt(h.db), updateIsAuthorized(h.db))(ctx, client, user, phone)
 }
 
 func (h *Hub) newClient(user store.User, phone string) *telegram.Client {
@@ -193,7 +195,7 @@ func (h *Hub) newClient(user store.User, phone string) *telegram.Client {
 	})
 }
 
-func (h *Hub) makeClient(user store.User, phone string, fn prepareFn) (*telegram.Client, error) {
+func (h *Hub) makeClient(user store.User, phone string, onConnectActions ...action) (*telegram.Client, error) {
 	client := h.newClient(user, phone)
 	withErrCh := make(chan error, 1)
 
@@ -214,8 +216,11 @@ func (h *Hub) makeClient(user store.User, phone string, fn prepareFn) (*telegram
 
 		h.log.Info("run telegram client", zap.String("phone", phone), zap.Duration("ttl", h.clientTTL))
 		err := client.Run(ctx, func(ctx context.Context) error {
-			// todo save user state
-			if err := fn(ctx, client); err != nil {
+			// wait for session to be stored, because connection don`t wait session stored
+			// 2022-03-16T15:32:35.582+0200 telegram/connect.go:84  Ready
+			// 2022-03-16T15:32:35.687+0200 telegram/session.go:89  Data saved
+			time.Sleep(500 * time.Millisecond)
+			if err := chain(onConnectActions...)(ctx, client, user, phone); err != nil {
 				return err
 			}
 			withErrCh <- nil
@@ -263,12 +268,12 @@ func (h *Hub) clientSendReport(ctx context.Context, client *telegram.Client, url
 	}, nil
 }
 
-func (h *Hub) getOrMakeClient(user store.User, phone string, fn prepareFn) (*telegram.Client, error) {
+func (h *Hub) getOrMakeClient(user store.User, phone string, actions ...action) (*telegram.Client, error) {
 	client, err := h.getClient(user.ID, phone)
 	if err == nil {
 		return client, nil
 	}
-	return h.makeClient(user, phone, fn)
+	return h.makeClient(user, phone, actions...)
 }
 
 func (h *Hub) getClient(userID int64, phone string) (*telegram.Client, error) {
@@ -294,17 +299,20 @@ func isAuthorizedClient(ctx context.Context, client *telegram.Client) (bool, err
 	return status.Authorized, nil
 }
 
-type prepareFn func(ctx context.Context, client *telegram.Client) error
+func logFlood(logger *zap.Logger) telegram.Middleware {
+	return telegram.MiddlewareFunc(func(next tg.Invoker) telegram.InvokeFunc {
+		return func(ctx context.Context, input bin.Encoder, output bin.Decoder) error {
+			err := next.Invoke(ctx, input, output)
+			if err == nil {
+				return nil
+			}
 
-func noop(context.Context, *telegram.Client) error { return nil }
-
-func checkAuthorization(ctx context.Context, client *telegram.Client) error {
-	isAuthorized, err := isAuthorizedClient(ctx, client)
-	if err != nil {
-		return err
-	}
-	if !isAuthorized {
-		return NotAuthorizedErr
-	}
-	return nil
+			d, ok := tgerr.AsFloodWait(err)
+			if !ok {
+				return err
+			}
+			logger.Info("got FLOOD_WAIT", zap.Duration("duration", d))
+			return err
+		}
+	})
 }

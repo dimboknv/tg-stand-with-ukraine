@@ -119,13 +119,9 @@ func (r *Reporter) userSendReports(ctx context.Context, user store.User, rashist
 		return err
 	}
 	for phone := range clientsReps {
-		if user.Clients[phone].SentReports == nil {
-			user.Clients[phone].SentReports = map[string]store.Report{}
-		}
 		for url := range clientsReps[phone].SentReports {
 			user.Clients[phone].SentReports[url] = clientsReps[phone].SentReports[url]
 		}
-
 	}
 	return r.db.PutUser(user)
 }
