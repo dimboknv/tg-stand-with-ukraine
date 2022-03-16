@@ -118,8 +118,9 @@ func (b *Bot) getUser(u tgbotapi.Update) (store.User, error) {
 			return store.User{}, errors.Wrap(err, "can`t get user")
 		}
 		user = store.User{
-			Chats: map[int64]*store.Chat{},
-			ID:    u.SentFrom().ID,
+			Chats:   map[int64]*store.Chat{},
+			ID:      u.SentFrom().ID,
+			Clients: map[string]*store.Client{},
 		}
 	}
 	if _, has := user.Chats[chatID]; !has {
