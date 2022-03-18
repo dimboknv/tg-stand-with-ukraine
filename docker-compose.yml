@@ -4,23 +4,28 @@ services:
   tg-stand-for-ukraine:
     build: .
     environment:
-      - TOKEN=
+      - TOKEN=<bot token>
       - DB=/app/db/bbolt.db
       - ADMIN=
       - DEBUG=true
+      - PATTERN=/
+      - CERT_FILE=
+      - KEY_FILE=
+      - WEBHOOK_URL=
+      - ADDRESS=
 
-      - HUB_APP_ID=
-      - HUB_APP_HASH=
-      - HUB_PUBLIC_KEY=/app/publicKey.pem
+      - HUB_APP_ID=<app_id>
+      - HUB_APP_HASH=<app_hash>
+      - HUB_PUBLIC_KEY=/app/tg_app_public_key.pem
       - HUB_DEVICE=Dmitry Nev
-      - HUB_CLIENT_TTL=10m
+      - HUB_CLIENT_TTL=7m
 
-      - HUB_DC_PORT=443
+      - HUB_DC_PORT=
       - HUB_DC_IP=
-      - HUB_DC_ID=2
+      - HUB_DC_ID=
 
-      - REPORTER_INTERVAL=40m
-      - REPORTER_INTERVAL_MAX_REPORTS=25
+      - REPORTER_INTERVAL=50m
+      - REPORTER_INTERVAL_MAX_REPORTS=20
       - REPORTER_MESSAGE=The channel undermines the integrity of the Ukrainian state. Spreading fake news, misleading people. There are a lot of posts with threats against Ukrainians and Ukrainian soldiers. Block him ASAP
     volumes:
       - ./publicKey.pem:/app/publicKey.pem
