@@ -270,6 +270,7 @@ func (b *Bot) handleUserErrorIfNeeded(u tgbotapi.Update, maybeUserErr error) err
 	if err != nil {
 		return err
 	}
+	user.Chats[u.FromChat().ID].DeleteMsgIDs = nil
 	user.Chats[u.FromChat().ID].Navigation = store.UserNavigation
 	return b.db.PutUser(user)
 }

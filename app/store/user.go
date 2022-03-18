@@ -27,11 +27,12 @@ type User struct {
 }
 
 type Chat struct {
-	AuthPhone  string
-	AuthCode   string
-	ID         int64
-	ReplyMsgID int
-	Navigation Navigation
+	AuthPhone    string
+	AuthCode     string
+	DeleteMsgIDs []int
+	ID           int64
+	ReplyMsgID   int
+	Navigation   Navigation
 }
 
 type Client struct {

@@ -118,6 +118,7 @@ Send 1-th part`
 func (b *Bot) splitCode1Navigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
 	user.Chats[chatID].Navigation = store.SplitCode2Navigation
 	user.Chats[chatID].AuthCode = strings.TrimSpace(getMessageText(user, chatID, u))
+	user.Chats[chatID].DeleteMsgIDs = append(user.Chats[chatID].DeleteMsgIDs, u.Message.MessageID)
 	if err := b.db.PutUser(user); err != nil {
 		return err
 	}
@@ -126,6 +127,7 @@ func (b *Bot) splitCode1Navigation(ctx context.Context, user store.User, chatID 
 
 func (b *Bot) splitCode2Navigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
 	user.Chats[chatID].AuthCode += strings.TrimSpace(getMessageText(user, chatID, u))
+	user.Chats[chatID].DeleteMsgIDs = append(user.Chats[chatID].DeleteMsgIDs, u.Message.MessageID)
 	if err := b.db.PutUser(user); err != nil {
 		return err
 	}
@@ -133,6 +135,10 @@ func (b *Bot) splitCode2Navigation(ctx context.Context, user store.User, chatID 
 }
 
 func (b *Bot) codeNavigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
+	user.Chats[chatID].DeleteMsgIDs = append(user.Chats[chatID].DeleteMsgIDs, u.Message.MessageID)
+	if err := b.db.PutUser(user); err != nil {
+		return err
+	}
 	return b.startHubAuth(ctx, user, chatID, strings.TrimSpace(getMessageText(user, chatID, u)))
 }
 
@@ -148,8 +154,12 @@ func (b *Bot) startHubAuth(ctx context.Context, user store.User, chatID int64, c
 	if user, err = b.db.GetUser(user.ID); err != nil {
 		return err
 	}
+	if err := b.deleteChatMessages(chatID, user.Chats[chatID].DeleteMsgIDs...); err != nil {
+		return err
+	}
 	msg := fmt.Sprintf("Thanks! %q is successfully sign in!", user.Chats[chatID].AuthPhone)
 	user.Chats[chatID].Navigation = store.UserNavigation
+	user.Chats[chatID].DeleteMsgIDs = nil
 	if req2fa {
 		msg = "Send 2FA code"
 		user.Chats[chatID].Navigation = store.Pass2faNavigation
@@ -162,7 +172,12 @@ func (b *Bot) startHubAuth(ctx context.Context, user store.User, chatID int64, c
 
 func (b *Bot) pass2faNavigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
 	pass2fa := strings.TrimSpace(getMessageText(user, chatID, u))
+	user.Chats[chatID].DeleteMsgIDs = append(user.Chats[chatID].DeleteMsgIDs, u.Message.MessageID)
+	if err := b.deleteChatMessages(chatID, user.Chats[chatID].DeleteMsgIDs...); err != nil {
+		return err
+	}
 	user.Chats[chatID].Navigation = store.UserNavigation
+	user.Chats[chatID].DeleteMsgIDs = nil
 	if err := b.db.PutUser(user); err != nil {
 		return err
 	}
@@ -225,4 +240,13 @@ func (b *Bot) sendInlineKbWithPhone(user store.User, chatID int64, phone string)
 	}
 	user.Chats[chatID].ReplyMsgID = resp.MessageID
 	return b.db.PutUser(user)
+}
+
+func (b *Bot) deleteChatMessages(chatID int64, ids ...int) error {
+	for _, id := range ids {
+		if _, err := b.bot.Request(tgbotapi.NewDeleteMessage(chatID, id)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
