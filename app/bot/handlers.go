@@ -9,8 +9,8 @@ import (
 
 type handler func(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error
 
-func (b *Bot) registerHandlers() {
-	b.msgHandlers = map[store.Navigation]handler{
+func (b *Bot) registerNavigationHandlers() {
+	b.navHandlers = map[store.Navigation]handler{
 		store.UserNavigation:       b.userNavigation,
 		store.Pass2faNavigation:    b.pass2faNavigation,
 		store.CodeNavigation:       b.codeNavigation,
@@ -35,7 +35,7 @@ func (b *Bot) handleUpdate(ctx context.Context, u tgbotapi.Update) error {
 	}
 
 	handler := func(context.Context, store.User, int64, tgbotapi.Update) error { return b.sendWelcomeMsg(chatID) }
-	if h, has := b.msgHandlers[user.Chats[chatID].Navigation]; has {
+	if h, has := b.navHandlers[user.Chats[chatID].Navigation]; has {
 		handler = h
 	}
 

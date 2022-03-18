@@ -25,10 +25,14 @@ Help Options:
   --token=             Bot token [$TOKEN]
   --db=                Database filepath (default: bbolt.db) [$DB]
   -a, --admin=         Bot admin telegram usernames [$ADMIN]
+  --pattern=           Bot server handler pattern (default: /) [$PATTERN]
+  --cert=              Bot server tls cert file [$CERT_FILE]
+  --key=               Bot server tls key file [$KEY_FILE]
+  --webhook_url=       Bot server webhook url [$WEBHOOK_URL]
+  --address=           Bot server bind address (default: 0.0.0.0:443) [$ADDRESS]
 
 reporter:
-  --reporter.msg=      A report message (default: The channel undermines the integrity of the Ukrainian state. Spreading fake news, misleading people. There are a lot of posts with threats against
-    Ukrainians and Ukrainian soldiers. Block him ASAP) [$REPORTER_MESSAGE]
+  --reporter.msg=      A report message (default: The channel undermines the integrity of the Ukrainian state. Spreading fake news, misleading people. There are a lot of posts with threats against Ukrainians and Ukrainian soldiers. Block him ASAP) [$REPORTER_MESSAGE]
   --reporter.interval= Interval between sending reports (default: 40m) [$REPORTER_INTERVAL]
   --reporter.max_reps= Max number of sent reports from a telegram client (default: 25) [$REPORTER_INTERVAL_MAX_REPORTS]
 
@@ -56,24 +60,30 @@ services:
     container_name: tg-stand-with-ukraine
     hostname: tg-stand-with-ukraine
     environment:
-      - TOKEN=<BOT TOKEN>
+      - TOKEN=<bot token>
       - DB=/app/db/bbolt.db
-      - ADMIN=<telegram acoount usernames>
+      - ADMIN=
       - DEBUG=true
+      - PATTERN=/
+      - CERT_FILE=
+      - KEY_FILE=
+      - WEBHOOK_URL=
+      - ADDRESS=
 
-      - HUB_APP_ID=<TELEGRAM app_id>
-      - HUB_APP_HASH=<TELEGRAM app_hash>
-      - HUB_PUBLIC_KEY=/app/publicKey.pem
+      - HUB_APP_ID=<app_id>
+      - HUB_APP_HASH=<app_hash>
+      - HUB_PUBLIC_KEY=/app/tg_app_public_key.pem
       - HUB_DEVICE=Dmitry Nev
-      - HUB_CLIENT_TTL=10m
+      - HUB_CLIENT_TTL=7m
 
-      - HUB_DC_PORT=<TELEGRAM DC PORT>
-      - HUB_DC_IP=<TELEGRAM DC IP>
-      - HUB_DC_ID=<TELEGRAM DC ID>
+      - HUB_DC_PORT=
+      - HUB_DC_IP=
+      - HUB_DC_ID=
 
-      - REPORTER_INTERVAL=40m
-      - REPORTER_INTERVAL_MAX_REPORTS=25
+      - REPORTER_INTERVAL=50m
+      - REPORTER_INTERVAL_MAX_REPORTS=20
       - REPORTER_MESSAGE=The channel undermines the integrity of the Ukrainian state. Spreading fake news, misleading people. There are a lot of posts with threats against Ukrainians and Ukrainian soldiers. Block him ASAP
+
     volumes:
       - <PUBLIC KEY FILE>:/app/publicKey
       - <DATABASE FOLDER>::/app/db

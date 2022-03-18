@@ -40,8 +40,13 @@ type BotCmd struct {
 	Token    string `long:"token" env:"TOKEN" description:"Bot token" required:"true"`
 	DB       string `long:"db" env:"DB" description:"Database filepath" required:"true" default:"bbolt.db"`
 	CommonOpts
-	Admins []string `short:"a" long:"admin" env:"ADMIN" env-delim:"," description:"Bot admin telegram usernames" required:"true"`
-	Hub    `group:"hub" namespace:"hub" env-namespace:"HUB"`
+	Admins     []string       `short:"a" long:"admin" env:"ADMIN" env-delim:"," description:"Bot admin telegram usernames" required:"true"`
+	Pattern    string         `long:"pattern" env:"PATTERN" description:"Bot server handler pattern" default:"/"`
+	CertFile   flags.Filename `long:"cert" env:"CERT_FILE" description:"Bot server tls cert file"`
+	KeyFile    flags.Filename `long:"key" env:"KEY_FILE" description:"Bot server tls key file"`
+	WebhookURL string         `long:"webhook_url" env:"WEBHOOK_URL" description:"Bot server webhook url"`
+	Address    string         `long:"address" env:"ADDRESS" description:"Bot server bind address" default:"0.0.0.0:443"`
+	Hub        `group:"hub" namespace:"hub" env-namespace:"HUB"`
 }
 
 // Execute gets statements list for specified merchant, entry point for "statements" command
@@ -106,13 +111,18 @@ func (cmd *BotCmd) Execute(_ []string) error {
 	})
 
 	b, err := bot.New(bot.Opts{
-		Token:    cmd.Token,
-		DB:       db,
-		Debug:    cmd.Debug,
-		Logger:   cmd.Logger.Named("bot"),
-		Hub:      h,
-		Admins:   cmd.Admins,
-		Reporter: rep,
+		DB:         db,
+		Logger:     cmd.Logger.Named("bot"),
+		Hub:        h,
+		Reporter:   rep,
+		Token:      cmd.Token,
+		CertFile:   string(cmd.CertFile),
+		KeyFile:    string(cmd.KeyFile),
+		WebhookURL: cmd.WebhookURL,
+		Pattern:    cmd.Pattern,
+		Address:    cmd.Address,
+		Admins:     cmd.Admins,
+		Debug:      cmd.Debug,
 	})
 	if err != nil {
 		return errors.Wrap(err, "can`t create bot")
