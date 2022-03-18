@@ -83,7 +83,6 @@ services:
       - REPORTER_INTERVAL=50m
       - REPORTER_INTERVAL_MAX_REPORTS=20
       - REPORTER_MESSAGE=The channel undermines the integrity of the Ukrainian state. Spreading fake news, misleading people. There are a lot of posts with threats against Ukrainians and Ukrainian soldiers. Block him ASAP
-
     volumes:
       - <PUBLIC KEY FILE>:/app/publicKey
       - <DATABASE FOLDER>::/app/db

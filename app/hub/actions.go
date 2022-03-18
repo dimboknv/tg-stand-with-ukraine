@@ -50,13 +50,13 @@ func updateIsAuthorized(db store.Store) action {
 	}
 }
 
-func updateSignInAt(db store.Store) action {
+func updateLogInAt(db store.Store) action {
 	return func(ctx context.Context, client *telegram.Client, user store.User, phone string) error {
 		u, err := db.GetUser(user.ID)
 		if err != nil {
 			return err
 		}
-		u.Clients[phone].SignInAt = time.Now()
+		u.Clients[phone].LogInAt = time.Now()
 		return db.PutUser(u)
 	}
 }

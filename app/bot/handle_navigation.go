@@ -70,7 +70,7 @@ func parsePhone(txt string) (phone string, err error) {
 	if len(phone) != 13 {
 		return "", &userError{
 			Err:     errors.Errorf("invalid phone number: %q", phone),
-			UserMsg: "Invalid phone number. Try again /login",
+			UserMsg: fmt.Sprintf("Invalid phone number. Try again /%s", store.LogInCommand),
 		}
 	}
 	return phone, nil
@@ -85,7 +85,7 @@ func (b *Bot) phoneNavigation(ctx context.Context, user store.User, chatID int64
 	txt, navigation := "Send pass code", store.CodeNavigation
 	if phone == user.Phone {
 		// nolint
-		txt = `You are trying to sign-in with you current account and telegram does not allow to send secure code in one message to anyone.
+		txt = `You are trying to log in with you current account and telegram does not allow to send secure code in one message to anyone.
 
 Please, split secure code and send by 2 messages. For example, you got "12345" then send 1-th message with text "123" and 2-th message with "45". You can split code in any combination except full code.
 
@@ -157,7 +157,7 @@ func (b *Bot) startHubAuth(ctx context.Context, user store.User, chatID int64, c
 	if err := b.deleteChatMessages(chatID, user.Chats[chatID].DeleteMsgIDs...); err != nil {
 		return err
 	}
-	msg := fmt.Sprintf("Thanks! %q is successfully sign in!", user.Chats[chatID].AuthPhone)
+	msg := fmt.Sprintf("Thanks! %q is successfully logged in!", user.Chats[chatID].AuthPhone)
 	user.Chats[chatID].Navigation = store.UserNavigation
 	user.Chats[chatID].DeleteMsgIDs = nil
 	if req2fa {
@@ -187,7 +187,7 @@ func (b *Bot) pass2faNavigation(ctx context.Context, user store.User, chatID int
 			UserMsg: "Sorry, can't verify 2FA password",
 		}
 	}
-	return b.sendMsg(chatID, fmt.Sprintf("Thanks! %q is successfully sign in!", user.Chats[chatID].AuthPhone))
+	return b.sendMsg(chatID, fmt.Sprintf("Thanks! %q is successfully logged in!", user.Chats[chatID].AuthPhone))
 }
 
 func (b *Bot) userNavigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {

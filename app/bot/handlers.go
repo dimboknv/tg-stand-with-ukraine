@@ -22,7 +22,7 @@ func (b *Bot) registerNavigationHandlers() {
 
 	b.cmdHandlers = map[string]handler{
 		store.StartCommand: b.handleStartCommand,
-		store.LoginCommand: b.handleLoginCommand,
+		store.LogInCommand: b.handleLogInCommand,
 	}
 }
 

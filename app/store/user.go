@@ -5,8 +5,8 @@ import "time"
 type Navigation int
 
 const (
-	LoginCommand  = "login"
-	LogoutCommand = "logout"
+	LogInCommand  = "login"
+	LogOutCommand = "logout"
 	StartCommand  = "start"
 
 	WelcomeNavigation Navigation = iota
@@ -37,7 +37,7 @@ type Chat struct {
 
 type Client struct {
 	LastConnectionAt time.Time
-	SignInAt         time.Time
+	LogInAt          time.Time
 	SentReports      map[string]Report // [url]report
 	Phone            string
 	Session          []byte

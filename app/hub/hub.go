@@ -150,7 +150,7 @@ func (h *Hub) AuthCode(ctx context.Context, user store.User, phone, code string)
 		return false, err
 	}
 	if authorized {
-		return false, chain(updateSignInAt(h.db), updateIsAuthorized(h.db))(ctx, client, user, phone)
+		return false, chain(updateLogInAt(h.db), updateIsAuthorized(h.db))(ctx, client, user, phone)
 	}
 
 	_, signInErr := client.Auth().SignIn(ctx, phone, code, codeHash)
@@ -169,7 +169,7 @@ func (h *Hub) AuthPass2FA(ctx context.Context, user store.User, phone, pass2fa s
 	if _, err := client.Auth().Password(ctx, pass2fa); err != nil {
 		return errors.Wrap(err, "invalid 2fa")
 	}
-	return chain(updateSignInAt(h.db), updateIsAuthorized(h.db))(ctx, client, user, phone)
+	return chain(updateLogInAt(h.db), updateIsAuthorized(h.db))(ctx, client, user, phone)
 }
 
 func (h *Hub) newClient(user store.User, phone string) *telegram.Client {
