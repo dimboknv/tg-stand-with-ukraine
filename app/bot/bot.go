@@ -81,7 +81,7 @@ func New(opts Opts) (*Bot, error) {
 // Run all deps and bot. Returns an error if occur
 // nolint:gocyclo // running all deps is complexity
 func (b *Bot) Run(ctx context.Context) error {
-	b.registerNavigationHandlers()
+	b.registerHandlers()
 	updates, srv, err := b.updates()
 	if err != nil {
 		return err
@@ -154,9 +154,9 @@ func (b *Bot) pullUpdates() (tgbotapi.UpdatesChannel, error) {
 		return nil, errors.Errorf("can`t delete webhook")
 	}
 
-	updateConfig := tgbotapi.NewUpdate(0)
-	updateConfig.Timeout = 60
-	return b.bot.GetUpdatesChan(updateConfig), nil
+	return b.bot.GetUpdatesChan(tgbotapi.UpdateConfig{
+		Timeout: 60,
+	}), nil
 }
 
 func (b *Bot) webhookUpdates() (tgbotapi.UpdatesChannel, *http.Server, error) {
@@ -233,17 +233,17 @@ func (b *Bot) getUser(u tgbotapi.Update) (store.User, error) {
 	return user, nil
 }
 
-func (b *Bot) sendMsg(chatID int64, msg string) error {
-	m := tgbotapi.NewMessage(chatID, msg)
-	m.ParseMode = tgbotapi.ModeMarkdown
-	if _, err := b.bot.Send(m); err != nil {
+func (b *Bot) sendTextMsg(chatID int64, txt string) error {
+	msg := tgbotapi.NewMessage(chatID, txt)
+	msg.ParseMode = tgbotapi.ModeMarkdown
+	if _, err := b.bot.Send(msg); err != nil {
 		return errors.Wrap(err, "fail to send bot message")
 	}
 	return nil
 }
 
 func (b *Bot) sendWelcomeMsg(chatID int64) error {
-	return b.sendMsg(chatID, "Welcome to reporter bot. You need to give me access to your telegram account. Stand with Ukraine!")
+	return b.sendTextMsg(chatID, "Welcome to reporter bot. You need to give me access to your telegram account. Stand with Ukraine!")
 }
 
 func (b *Bot) handleUserErrorIfNeeded(u tgbotapi.Update, maybeUserErr error) error {

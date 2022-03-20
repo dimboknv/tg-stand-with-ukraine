@@ -13,13 +13,13 @@ import (
 )
 
 type Reporter struct {
-	db                   store.Store
-	hub                  *hub.Hub
-	log                  *zap.Logger
-	unresolvedRashistsCh chan store.Rashist
-	message              string
-	intervalMaxReps      int
-	interval             time.Duration
+	db                store.Store
+	hub               *hub.Hub
+	log               *zap.Logger
+	updatedRashistsCh chan store.Rashist
+	message           string
+	intervalMaxReps   int
+	interval          time.Duration
 }
 
 type Opts struct {
@@ -34,13 +34,13 @@ type Opts struct {
 func New(opts Opts) *Reporter {
 	rand.Seed(time.Now().UnixNano())
 	return &Reporter{
-		db:                   opts.DB,
-		hub:                  opts.Hub,
-		log:                  opts.Logger,
-		message:              opts.Message,
-		interval:             opts.Interval,
-		intervalMaxReps:      opts.IntervalMaxReports,
-		unresolvedRashistsCh: make(chan store.Rashist, 1),
+		db:                opts.DB,
+		hub:               opts.Hub,
+		log:               opts.Logger,
+		message:           opts.Message,
+		interval:          opts.Interval,
+		intervalMaxReps:   opts.IntervalMaxReports,
+		updatedRashistsCh: make(chan store.Rashist, 1),
 	}
 }
 
@@ -49,8 +49,7 @@ func (r *Reporter) clientSendReports(ctx context.Context, user store.User, phone
 	reports := make([]store.Report, 0)
 
 LOOP:
-	for i := range rashists {
-		url := rashists[i].URL
+	for _, rashist := range rashists {
 		select {
 		case <-ctx.Done():
 			break LOOP
@@ -59,22 +58,23 @@ LOOP:
 		if max == 0 {
 			break
 		}
-		if _, has := user.Clients[phone].SentReports[url]; has {
+		if _, has := user.Clients[phone].SentReports[rashist.URL]; has {
 			continue
 		}
 
-		rep, err := r.hub.SendReport(ctx, user, phone, url, r.message)
+		rep, err := r.hub.SendReport(ctx, user, phone, rashist.URL, r.message)
 		if err != nil {
 			r.log.Error("failed to send report report",
-				zap.Int64("userID", user.ID), zap.String("phone", phone), zap.String("url", url), zap.Error(err))
+				zap.Int64("userID", user.ID), zap.String("phone", phone), zap.String("url", rashist.URL), zap.Error(err))
 			resolveErr := &hub.ResolveURLErr{}
 			switch {
 			case errors.Is(err, hub.NotAuthorizedErr):
 				break LOOP
 			case errors.As(err, &resolveErr):
-				r.unresolvedRashistsCh <- store.Rashist{
-					URL:        resolveErr.URL,
+				r.updatedRashistsCh <- store.Rashist{
+					URL:        rashist.URL,
 					ResolveErr: resolveErr.Error(),
+					CreatedAt:  rashist.CreatedAt,
 				}
 			}
 			continue
@@ -137,15 +137,16 @@ func (r *Reporter) sendReports(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "can`t get rashists")
 	}
-	noMercy := make([]store.Rashist, 0)
+	tmp := make([]store.Rashist, 0)
 	for i := range rashists {
 		if rashists[i].ResolveErr == "" {
-			noMercy = append(noMercy, rashists[i])
+			tmp = append(tmp, rashists[i])
 		}
 	}
-	rashists = noMercy
+	rashists = tmp
 
-	resCh := r.collectUnresolvedRashists()
+	r.updatedRashistsCh = make(chan store.Rashist, 1)
+	collectedRashistsCh := collect(r.updatedRashistsCh)
 	wg := &sync.WaitGroup{}
 	wg.Add(len(users))
 	for _, user := range users {
@@ -158,22 +159,21 @@ func (r *Reporter) sendReports(ctx context.Context) error {
 		}(user)
 	}
 	wg.Wait()
-	close(r.unresolvedRashistsCh)
-	return r.db.PutRashists(<-resCh)
+	close(r.updatedRashistsCh)
+	return r.db.PutRashists(<-collectedRashistsCh)
 }
 
-func (r *Reporter) collectUnresolvedRashists() chan []store.Rashist {
+func collect(ch <-chan store.Rashist) chan []store.Rashist {
 	resCh := make(chan []store.Rashist)
-	r.unresolvedRashistsCh = make(chan store.Rashist, 1)
 
 	go func() {
-		unresolvedRashistsMap := map[string]store.Rashist{}
-		for rashist := range r.unresolvedRashistsCh {
-			unresolvedRashistsMap[rashist.URL] = rashist
+		rashistsMap := map[string]store.Rashist{}
+		for rashist := range ch {
+			rashistsMap[rashist.URL] = rashist
 		}
-		rashists := make([]store.Rashist, 0, len(unresolvedRashistsMap))
-		for key := range unresolvedRashistsMap {
-			rashists = append(rashists, unresolvedRashistsMap[key])
+		rashists := make([]store.Rashist, 0, len(rashistsMap))
+		for key := range rashistsMap {
+			rashists = append(rashists, rashistsMap[key])
 		}
 		resCh <- rashists
 		close(resCh)
@@ -204,11 +204,14 @@ func (r *Reporter) Run(ctx context.Context) error {
 	ticker := time.NewTicker(r.interval)
 	defer ticker.Stop()
 	r.log.Info("reporter is started", zap.Duration("interval", r.interval))
+	wg := &sync.WaitGroup{}
 
 	for {
 		select {
 		case <-ticker.C:
+			wg.Add(1)
 			go func() {
+				defer wg.Done()
 				r.log.Info("start reporting...")
 				c, cancel := context.WithTimeout(ctx, r.interval-time.Minute)
 
@@ -221,6 +224,7 @@ func (r *Reporter) Run(ctx context.Context) error {
 				r.log.Info("reporting is done")
 			}()
 		case <-ctx.Done():
+			wg.Wait()
 			return nil
 		}
 	}

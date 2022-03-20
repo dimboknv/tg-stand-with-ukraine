@@ -109,7 +109,7 @@ func (h *Hub) SendReport(ctx context.Context, user store.User, phone, url, msg s
 	return h.clientSendReport(ctx, client, url, msg)
 }
 
-func (h *Hub) AuthPhone(ctx context.Context, user store.User, phone string) error {
+func (h *Hub) AuthStart(ctx context.Context, user store.User, phone string) error {
 	client, err := h.getOrMakeClient(user, phone, updateLastConnectionAt(h.db), updateIsAuthorized(h.db))
 	if err != nil {
 		return err
@@ -134,7 +134,7 @@ func (h *Hub) AuthPhone(ctx context.Context, user store.User, phone string) erro
 	return nil
 }
 
-func (h *Hub) AuthCode(ctx context.Context, user store.User, phone, code string) (need2fa bool, err error) {
+func (h *Hub) AuthPutCode(ctx context.Context, user store.User, phone, code string) (need2fa bool, err error) {
 	h.mu.Lock()
 	codeHash := h.phoneCodeHash[key(user.ID, phone)]
 	delete(h.phoneCodeHash, key(user.ID, phone))
@@ -161,7 +161,7 @@ func (h *Hub) AuthCode(ctx context.Context, user store.User, phone, code string)
 	return false, errors.Wrap(signInErr, "signIn failed")
 }
 
-func (h *Hub) AuthPass2FA(ctx context.Context, user store.User, phone, pass2fa string) error {
+func (h *Hub) AuthPutPass2FA(ctx context.Context, user store.User, phone, pass2fa string) error {
 	client, err := h.getClient(user.ID, phone)
 	if err != nil {
 		return err

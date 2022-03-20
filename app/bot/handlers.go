@@ -9,7 +9,7 @@ import (
 
 type handler func(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error
 
-func (b *Bot) registerNavigationHandlers() {
+func (b *Bot) registerHandlers() {
 	b.navHandlers = map[store.Navigation]handler{
 		store.UserNavigation:       b.userNavigation,
 		store.Pass2faNavigation:    b.pass2faNavigation,

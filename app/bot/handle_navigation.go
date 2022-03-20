@@ -97,7 +97,7 @@ Send 1-th part`
 	if err := b.db.PutUser(user); err != nil {
 		return err
 	}
-	if err := b.hub.AuthPhone(ctx, user, phone); err != nil {
+	if err := b.hub.AuthStart(ctx, user, phone); err != nil {
 		if errors.Is(err, hub.AlreadyAuthorizedErr) {
 			return &userError{
 				Err:     err,
@@ -122,7 +122,7 @@ func (b *Bot) splitCode1Navigation(ctx context.Context, user store.User, chatID 
 	if err := b.db.PutUser(user); err != nil {
 		return err
 	}
-	return b.sendMsg(chatID, "Send 2-th part")
+	return b.sendTextMsg(chatID, "Send 2-th part")
 }
 
 func (b *Bot) splitCode2Navigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
@@ -131,7 +131,7 @@ func (b *Bot) splitCode2Navigation(ctx context.Context, user store.User, chatID 
 	if err := b.db.PutUser(user); err != nil {
 		return err
 	}
-	return b.startHubAuth(ctx, user, chatID, user.Chats[chatID].AuthCode)
+	return b.hubAuthPutCode(ctx, user, chatID, user.Chats[chatID].AuthCode)
 }
 
 func (b *Bot) codeNavigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
@@ -139,11 +139,11 @@ func (b *Bot) codeNavigation(ctx context.Context, user store.User, chatID int64,
 	if err := b.db.PutUser(user); err != nil {
 		return err
 	}
-	return b.startHubAuth(ctx, user, chatID, strings.TrimSpace(getMessageText(user, chatID, u)))
+	return b.hubAuthPutCode(ctx, user, chatID, strings.TrimSpace(getMessageText(user, chatID, u)))
 }
 
-func (b *Bot) startHubAuth(ctx context.Context, user store.User, chatID int64, code string) error {
-	req2fa, err := b.hub.AuthCode(ctx, user, user.Chats[chatID].AuthPhone, code)
+func (b *Bot) hubAuthPutCode(ctx context.Context, user store.User, chatID int64, code string) error {
+	req2fa, err := b.hub.AuthPutCode(ctx, user, user.Chats[chatID].AuthPhone, code)
 	if err != nil {
 		return &userError{
 			Err:     errors.Wrapf(err, "can`t verify code for %q", user.Chats[chatID].AuthPhone),
@@ -167,7 +167,7 @@ func (b *Bot) startHubAuth(ctx context.Context, user store.User, chatID int64, c
 	if err := b.db.PutUser(user); err != nil {
 		return err
 	}
-	return b.sendMsg(chatID, msg)
+	return b.sendTextMsg(chatID, msg)
 }
 
 func (b *Bot) pass2faNavigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
@@ -181,13 +181,13 @@ func (b *Bot) pass2faNavigation(ctx context.Context, user store.User, chatID int
 	if err := b.db.PutUser(user); err != nil {
 		return err
 	}
-	if err := b.hub.AuthPass2FA(ctx, user, user.Chats[chatID].AuthPhone, pass2fa); err != nil {
+	if err := b.hub.AuthPutPass2FA(ctx, user, user.Chats[chatID].AuthPhone, pass2fa); err != nil {
 		return &userError{
 			Err:     errors.Wrapf(err, "can`t verify 2FA password for %q", user.Chats[chatID].AuthPhone),
 			UserMsg: "Sorry, can't verify 2FA password",
 		}
 	}
-	return b.sendMsg(chatID, fmt.Sprintf("Thanks! %q is successfully logged in!", user.Chats[chatID].AuthPhone))
+	return b.sendTextMsg(chatID, fmt.Sprintf("Thanks! %q is successfully logged in!", user.Chats[chatID].AuthPhone))
 }
 
 func (b *Bot) userNavigation(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
@@ -196,7 +196,6 @@ func (b *Bot) userNavigation(ctx context.Context, user store.User, chatID int64,
 	}
 
 	urls := parseChanelURLs(u)
-
 	if err := b.reporter.AddRashists(ctx, urls); err != nil {
 		return err
 	}

@@ -17,7 +17,7 @@ func (b *Bot) handleStartCommand(ctx context.Context, user store.User, chatID in
 	if err := b.sendWelcomeMsg(chatID); err != nil {
 		return err
 	}
-	return b.sendMsg(chatID, fmt.Sprintf("Use /%s command for add telegram clients", store.LogInCommand))
+	return b.sendTextMsg(chatID, fmt.Sprintf("Use /%s command for add telegram clients", store.LogInCommand))
 }
 
 func (b *Bot) handleLogInCommand(ctx context.Context, user store.User, chatID int64, u tgbotapi.Update) error {
